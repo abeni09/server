@@ -1,0 +1,15 @@
+-- SELECT * FROM public.members ORDER BY id ASC limit 105;
+-- SELECT * FROM public.deposit ORDER BY deposited_for ASC;
+-- SELECT * FROM public.dailycontribution ORDER BY member ASC;
+SELECT * FROM public.lottonumbers order by lotto_number asc limit 9000;
+-- delete FROM public.lottosetting;
+-- delete FROM public.lottonumbers;
+-- delete FROM public.dailycontribution;
+-- delete FROM public.deposit;
+-- DELETE FROM public.deposit
+-- WHERE id IN (
+--     SELECT id
+--     FROM public.deposit
+--     ORDER BY id ASC
+--     LIMIT 100000
+-- );
