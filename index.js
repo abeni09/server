@@ -13,7 +13,41 @@ const { setTimeout } = require('timers');
 // Create an Express application
 const app = express();
 const port = 3006;
-const upload = multer({ dest: 'uploads/' }); // Destination folder for uploaded files
+
+let uploadPath = 'uploads/';
+// Set up Multer for file upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    if (req.body.memberId) {
+      uploadPath += req.body.memberId + '/';
+    } else {
+      uploadPath += 'logo/';
+    }
+    
+    // Create the directory if it doesn't exist
+    fs.mkdirSync(uploadPath, { recursive: true });
+    
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const imageName = req.body.imageName || 'logo'; // Use the imageName from the request body, defaulting to 'CustomName' if not provided
+    
+    // Check if a file with the same name exists
+    let filename = imageName + path.extname(file.originalname);
+    const filePath = path.join(uploadPath, filename);
+    console.log(filePath);
+    if (fs.existsSync(filePath)) {
+      // Delete the existing file
+      fs.unlinkSync(filePath);
+      console.log("file existed, deleted");
+    }
+    uploadPath = 'uploads/';
+
+    cb(null, filename);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 
 const SECRET_KEY = 'DerashUserJWT';
@@ -272,6 +306,37 @@ async function createTables() {
 // Call the function to create tables when the server starts
 createTables();
 
+
+// Route for uploading image
+app.post('/uploadImage', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // File uploaded successfully
+    let updateQuery = '';
+    let queryParams = [];
+
+    if (req.body.memberId) {
+      // Construct the update query dynamically based on the imageName
+      updateQuery = `UPDATE members SET ${req.body.imageName} = $1 WHERE id = $2`;
+      queryParams = [req.file.filename, req.body.memberId];
+    } else {
+      // Update lottoSetting table if memberId is not specified
+      updateQuery = 'UPDATE siteSettings SET image_url = $1 WHERE id = 1';
+      queryParams = [req.file.filename];
+    }
+
+    // Execute the update query
+    await pool.query(updateQuery, queryParams);
+
+    return res.status(200).json({ message: 'File uploaded successfully', filename: req.file.filename });
+  } catch (error) {
+    console.error('Error uploading image:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Endpoint to login a member
 app.post('/loginMember', async (req, res) => {
