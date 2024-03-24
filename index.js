@@ -9,7 +9,6 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const { setTimeout } = require('timers');
-const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
