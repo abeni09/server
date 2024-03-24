@@ -50,7 +50,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
-app.use('/uploads', express.static('uploads'));
+// app.use('/uploads', express.static('uploads'));
+
+// Serve static files from multiple directories
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const SECRET_KEY = 'DerashUserJWT';
 // Enable CORS for all routes
