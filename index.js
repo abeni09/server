@@ -603,7 +603,8 @@ app.post('/start-draw', async (req, res) => {
   // Endpoint to fetch members
   app.get('/fetchMembers', async (req, res) => {
     try {
-      const members = await pool.query('SELECT * FROM Members order by id limit 10');
+      // const members = await pool.query('SELECT * FROM Members order by id limit 10');
+      const members = await pool.query('SELECT * FROM Members');
       console.log("Members Count:", members.rowCount);
       res.status(200).json({ members: members.rows });
     } catch (error) {
@@ -988,36 +989,136 @@ app.post('/updateSiteSettings', async (req, res)=>{
     
   }
 })
+app.delete('/deleteMember/:id', async (req, res) => {
+  try {
+    const memberId = req.params.id;
+
+    // Check if memberId is provided
+    if (!memberId) {
+      return res.status(400).json({ message: 'Member ID is required' });
+    }
+
+    // Check if the member exists
+    const memberExistQuery = 'SELECT * FROM members WHERE id = $1';
+    const memberExistResult = await pool.query(memberExistQuery, [memberId]);
+
+    if (memberExistResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+
+    // Delete the member
+    const deleteMemberQuery = 'DELETE FROM members WHERE id = $1';
+    await pool.query(deleteMemberQuery, [memberId]);
+
+    return res.status(200).json({ message: 'Member deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting member:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 app.post('/saveMember', async (req, res) => {
   try {
-    const { member, edit, memberId } = req.body;
+    const { userData, edit, memberId } = req.body;
 
     // Check if required body parameters are missing
-    if (!member || edit == null) {
+    if (!userData || edit == null) {
       return res.status(400).json({ message: 'Required body parameters are missing' });
+    }
+    // console.log(userData.batch_number);
+    // Check if the number of members with the same batch_number has reached a certain limit
+    const maxBatchNumberCountQuery = 'SELECT * FROM sitesettings WHERE id = $1';
+    const maxBatchNumberCountResult = await pool.query(maxBatchNumberCountQuery, [1]);
+    const batchNumberCountQuery = 'SELECT COUNT(*) AS count FROM members WHERE batch_number = $1';
+    const batchNumberCountResult = await pool.query(batchNumberCountQuery, [userData.batch_number]);
+    const batchNumberCount = batchNumberCountResult.rows[0].count;
+    const maxBatchNumberCount = parseInt(maxBatchNumberCountResult.rows[0].maximum_members);
+
+    if (batchNumberCount >= maxBatchNumberCount) {
+      if (edit) {
+        const memberQueryResult = await pool.query('SELECT * FROM members WHERE batch_number = $1 and id = $2', [userData.batch_number, userData.id]);
+        if (memberQueryResult.rowCount == 0) {
+          return res.status(400).json({ message: 'Maximum number of members for this batch has been reached' });
+        }
+      } else {
+        return res.status(400).json({ message: 'Maximum number of members for this batch has been reached' });
+      }
     }
 
     if (edit) {
+      if (!memberId) {
+          return res.status(400).json({ message: 'Required body parameters are missing' });
+      }
       // If edit is true, construct the UPDATE query dynamically
-      const updateColumns = Object.keys(member).map((key, index) => `"${key}" = $${index + 1}`).join(', ');
-      const updateValues = Object.values(member);
-      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${memberId}`;
-      updateValues.push(member.member_id); // Assuming member_id is the unique identifier
-
+      let updateColumns = '';
+      let updateValues = [];
+      let index = 1;
+      Object.keys(userData).forEach(key => {
+          if (userData[key] !== null) {
+              if (key === 'updatedAt') {
+                  updateColumns += `"${key}" = NOW(), `;
+              } else {
+                  updateColumns += `"${key}" = $${index}, `;
+                  updateValues.push(userData[key]);
+                  index++;
+              }
+          }
+      });
+      // Remove the trailing comma and space
+      updateColumns = updateColumns.slice(0, -2);
+  
+      // Add the WHERE clause for the unique identifier
+      updateValues.push(memberId);
+      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${updateValues.length}`;
+  
       // Execute the update query
       await pool.query(updateQuery, updateValues);
       return res.status(200).json({ message: 'Member updated successfully' });
-    } else {
-      // If edit is false, construct the INSERT query dynamically
-      const insertColumns = Object.keys(member).map(key => `"${key}"`).join(', ');
-      const insertPlaceholders = Object.keys(member).map((_, index) => `$${index + 1}`).join(', ');
-      const insertValues = Object.values(member);
-      const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+    }
+  
+    else {
 
-      // Execute the insert query
-      await pool.query(insertQuery, insertValues);
-      return res.status(200).json({ message: 'New member inserted successfully' });
+      // Check if the phone number is unique and has not been used already
+      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM members WHERE phone = $1';
+      const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
+      const phoneExists = phoneExistsResult.rows[0].count > 0;
+
+      if (phoneExists) {
+        return res.status(400).json({ message: 'Phone number already exists' });
+      }
+      // If edit is false, construct the INSERT query dynamically
+      let insertColumns = '';
+      let insertPlaceholders = '';
+      let insertValues = [];
+      let index = 1;
+      Object.keys(userData).forEach(key => {
+          if (userData[key] !== null) {
+              insertColumns += `"${key}", `;
+              if (key === 'addedAt') {
+                  insertPlaceholders += 'NOW(), ';
+              } else {
+                  insertPlaceholders += `$${index}, `;
+                  insertValues.push(member[key]);
+                  index++;
+              }
+          }
+      });
+      // Remove the trailing comma and space
+      insertColumns = insertColumns.slice(0, -2);
+      insertPlaceholders = insertPlaceholders.slice(0, -2);
+
+      // Construct the INSERT query only if there are non-null values
+      if (insertColumns !== '') {
+          const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+
+          // Execute the insert query
+          await pool.query(insertQuery, insertValues);
+          return res.status(200).json({ message: 'New member inserted successfully' });
+      } else {
+          return res.status(400).json({ message: 'No values provided for insertion' });
+      }
+
+
     }
   } catch (error) {
     console.error('Error saving member:', error.message);
