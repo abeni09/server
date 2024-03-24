@@ -50,6 +50,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
+app.use('/uploads', express.static('uploads'));
+
 const SECRET_KEY = 'DerashUserJWT';
 // Enable CORS for all routes
 app.use(cors());
@@ -965,6 +967,42 @@ app.post('/updateSiteSettings', async (req, res)=>{
     
   }
 })
+
+app.post('/saveMember', async (req, res) => {
+  try {
+    const { member, edit, memberId } = req.body;
+
+    // Check if required body parameters are missing
+    if (!member || edit == null) {
+      return res.status(400).json({ message: 'Required body parameters are missing' });
+    }
+
+    if (edit) {
+      // If edit is true, construct the UPDATE query dynamically
+      const updateColumns = Object.keys(member).map((key, index) => `"${key}" = $${index + 1}`).join(', ');
+      const updateValues = Object.values(member);
+      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${memberId}`;
+      updateValues.push(member.member_id); // Assuming member_id is the unique identifier
+
+      // Execute the update query
+      await pool.query(updateQuery, updateValues);
+      return res.status(200).json({ message: 'Member updated successfully' });
+    } else {
+      // If edit is false, construct the INSERT query dynamically
+      const insertColumns = Object.keys(member).map(key => `"${key}"`).join(', ');
+      const insertPlaceholders = Object.keys(member).map((_, index) => `$${index + 1}`).join(', ');
+      const insertValues = Object.values(member);
+      const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+
+      // Execute the insert query
+      await pool.query(insertQuery, insertValues);
+      return res.status(200).json({ message: 'New member inserted successfully' });
+    }
+  } catch (error) {
+    console.error('Error saving member:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 // Endpoint to generate members
 app.post('/generateMembers', async (req, res) => {
