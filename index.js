@@ -14,15 +14,32 @@ const { setTimeout } = require('timers');
 const app = express();
 const port = 3006;
 
+// Enable CORS for all routes
+app.use(cors());
+
+// Parse URL-encoded bodies
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Parse JSON bodies
+app.use(bodyParser.json());
+
 let uploadPath = 'uploads/';
 // Set up Multer for file upload
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (req.body.memberId) {
-      uploadPath += req.body.memberId + '/';
-    } else {
-      uploadPath += 'logo/';
+    // Extract memberId and imageName from the filename
+      
+    const fileName = file.originalname.split('.')[0].split('-');
+    if (fileName.length > 1) {
+      const memberId =fileName[0];
+      uploadPath += memberId + '/';
+      
     }
+    else {
+      const imageName =fileName[0];
+      uploadPath += imageName + '/';
+    }
+    console.log(uploadPath);
     
     // Create the directory if it doesn't exist
     fs.mkdirSync(uploadPath, { recursive: true });
@@ -30,8 +47,15 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    const imageName = req.body.imageName || 'logo'; // Use the imageName from the request body, defaulting to 'CustomName' if not provided
-    
+    var imageName 
+    const fileName = file.originalname.split('.')[0].split('-');
+    if (fileName.length > 1) {
+      imageName =fileName[1];
+      
+    }
+    else {
+      imageName =fileName[0];
+    }
     // Check if a file with the same name exists
     let filename = imageName + path.extname(file.originalname);
     const filePath = path.join(uploadPath, filename);
@@ -56,13 +80,6 @@ const upload = multer({ storage: storage });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const SECRET_KEY = 'DerashUserJWT';
-// Enable CORS for all routes
-app.use(cors());
-// Parse JSON bodies
-app.use(bodyParser.json());
-
-// Parse URL-encoded bodies
-app.use(bodyParser.urlencoded({ extended: true }));
 
 
 let DRAW_STARTED_AT = null;
@@ -318,12 +335,13 @@ app.post('/uploadImage', upload.single('file'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    // console.log(req.body);
 
     // File uploaded successfully
     let updateQuery = '';
     let queryParams = [];
 
-    if (req.body.memberId) {
+    if (req.body.imageName != 'Logo') {
       // Construct the update query dynamically based on the imageName
       updateQuery = `UPDATE members SET ${req.body.imageName} = $1 WHERE id = $2`;
       queryParams = [req.file.filename, req.body.memberId];
@@ -585,7 +603,7 @@ app.post('/start-draw', async (req, res) => {
   // Endpoint to fetch members
   app.get('/fetchMembers', async (req, res) => {
     try {
-      const members = await pool.query('SELECT * FROM Members');
+      const members = await pool.query('SELECT * FROM Members order by id limit 10');
       console.log("Members Count:", members.rowCount);
       res.status(200).json({ members: members.rows });
     } catch (error) {
