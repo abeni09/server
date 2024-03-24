@@ -981,10 +981,12 @@ app.post('/generateMembers', async (req, res) => {
           // Generate members for the current batch
           for (let j = 0; j < batchCount; j++) {
             var phone = generateRandomPhoneNumber();
-            while (phone in phonesList) {
+            while (phonesList.includes(phone)) {
+              console.log(phone);
               phone = generateRandomPhoneNumber()
             }
             phonesList.push(phone)
+            // console.log(phonesList);
             const member = generateMember(i + j, phone); // Call a function to generate member data
             members.push(member);
           }
