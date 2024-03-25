@@ -1108,7 +1108,96 @@ app.post('/saveMember', async (req, res) => {
                   insertPlaceholders += 'NOW(), ';
               } else {
                   insertPlaceholders += `$${index}, `;
-                  insertValues.push(member[key]);
+                  insertValues.push(userData[key]);
+                  index++;
+              }
+          }
+      });
+      // Remove the trailing comma and space
+      insertColumns = insertColumns.slice(0, -2);
+      insertPlaceholders = insertPlaceholders.slice(0, -2);
+
+      // Construct the INSERT query only if there are non-null values
+      if (insertColumns !== '') {
+          const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+
+          // Execute the insert query
+          await pool.query(insertQuery, insertValues);
+          return res.status(200).json({ message: 'New member inserted successfully' });
+      } else {
+          return res.status(400).json({ message: 'No values provided for insertion' });
+      }
+
+
+    }
+  } catch (error) {
+    console.error('Error saving member:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.post('/saveUser', async (req, res) => {
+  try {
+    const { userData, edit, memberId } = req.body;
+
+    // Check if required body parameters are missing
+    if (!userData || edit == null) {
+      return res.status(400).json({ message: 'Required body parameters are missing' });
+    }
+    if (edit) {
+      if (!memberId) {
+          return res.status(400).json({ message: 'Required body parameters are missing' });
+      }
+      // If edit is true, construct the UPDATE query dynamically
+      let updateColumns = '';
+      let updateValues = [];
+      let index = 1;
+      Object.keys(userData).forEach(key => {
+          if (userData[key] !== null) {
+              if (key === 'updatedAt') {
+                  updateColumns += `"${key}" = NOW(), `;
+              } else {
+                  updateColumns += `"${key}" = $${index}, `;
+                  updateValues.push(userData[key]);
+                  index++;
+              }
+          }
+      });
+      // Remove the trailing comma and space
+      updateColumns = updateColumns.slice(0, -2);
+  
+      // Add the WHERE clause for the unique identifier
+      updateValues.push(memberId);
+      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${updateValues.length}`;
+  
+      // Execute the update query
+      await pool.query(updateQuery, updateValues);
+      return res.status(200).json({ message: 'Member updated successfully' });
+    }
+  
+    else {
+
+      // Check if the phone number is unique and has not been used already
+      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM members WHERE phone = $1';
+      const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
+      const phoneExists = phoneExistsResult.rows[0].count > 0;
+
+      if (phoneExists) {
+        return res.status(400).json({ message: 'Phone number already exists' });
+      }
+      // If edit is false, construct the INSERT query dynamically
+      let insertColumns = '';
+      let insertPlaceholders = '';
+      let insertValues = [];
+      let index = 1;
+      Object.keys(userData).forEach(key => {
+          if (userData[key] !== null) {
+              insertColumns += `"${key}", `;
+              if (key === 'addedAt') {
+                  insertPlaceholders += 'NOW(), ';
+              } else {
+                  insertPlaceholders += `$${index}, `;
+                  insertValues.push(userData[key]);
                   index++;
               }
           }
