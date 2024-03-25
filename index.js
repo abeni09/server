@@ -9,19 +9,19 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const { setTimeout } = require('timers');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+// const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
-// Define a reverse proxy middleware for your insecure HTTP service
-const proxy = createProxyMiddleware({
-    target: 'http://78.46.175.135:3006', // Replace with your insecure HTTP service URL
-    changeOrigin: true,
-    secure: false // Disable SSL certificate verification
-});
+// // Define a reverse proxy middleware for your insecure HTTP service
+// const proxy = createProxyMiddleware({
+//     target: 'http://78.46.175.135:3006', // Replace with your insecure HTTP service URL
+//     changeOrigin: true,
+//     secure: false // Disable SSL certificate verification
+// });
 
-// Use the reverse proxy middleware for all incoming requests
-app.use(proxy);
+// // Use the reverse proxy middleware for all incoming requests
+// app.use(proxy);
 const port = 3006;
 
 // Enable CORS for all routes
