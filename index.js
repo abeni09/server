@@ -1154,7 +1154,7 @@ app.post('/saveUser', async (req, res) => {
       let index = 1;
       Object.keys(userData).forEach(key => {
           if (userData[key] !== null) {
-              if (key === 'updatedAt') {
+              if (key === 'updated_at') {
                   updateColumns += `"${key}" = NOW(), `;
               } else {
                   updateColumns += `"${key}" = $${index}, `;
@@ -1193,7 +1193,7 @@ app.post('/saveUser', async (req, res) => {
       Object.keys(userData).forEach(key => {
           if (userData[key] !== null) {
               insertColumns += `"${key}", `;
-              if (key === 'addedAt') {
+              if (key === 'added_at') {
                   insertPlaceholders += 'NOW(), ';
               } else {
                   insertPlaceholders += `$${index}, `;
