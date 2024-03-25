@@ -1168,17 +1168,17 @@ app.post('/saveUser', async (req, res) => {
   
       // Add the WHERE clause for the unique identifier
       updateValues.push(memberId);
-      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${updateValues.length}`;
+      const updateQuery = `UPDATE users SET ${updateColumns} WHERE id = $${updateValues.length}`;
   
       // Execute the update query
       await pool.query(updateQuery, updateValues);
-      return res.status(200).json({ message: 'Member updated successfully' });
+      return res.status(200).json({ message: 'User updated successfully' });
     }
   
     else {
 
       // Check if the phone number is unique and has not been used already
-      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM members WHERE phone = $1';
+      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM users WHERE phone = $1';
       const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
       const phoneExists = phoneExistsResult.rows[0].count > 0;
 
@@ -1208,11 +1208,11 @@ app.post('/saveUser', async (req, res) => {
 
       // Construct the INSERT query only if there are non-null values
       if (insertColumns !== '') {
-          const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+          const insertQuery = `INSERT INTO users (${insertColumns}) VALUES (${insertPlaceholders})`;
 
           // Execute the insert query
           await pool.query(insertQuery, insertValues);
-          return res.status(200).json({ message: 'New member inserted successfully' });
+          return res.status(200).json({ message: 'New user inserted successfully' });
       } else {
           return res.status(400).json({ message: 'No values provided for insertion' });
       }
@@ -1220,7 +1220,7 @@ app.post('/saveUser', async (req, res) => {
 
     }
   } catch (error) {
-    console.error('Error saving member:', error.message);
+    console.error('Error saving user:', error.message);
     return res.status(500).json({ message: 'Internal server error' });
   }
 });
