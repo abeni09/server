@@ -338,14 +338,315 @@ async function createTables() {
 // Call the function to create tables when the server starts
 createTables();
 
+async function createTriggers() {
+  // const drawTriggerQuery = `
+  // CREATE OR REPLACE FUNCTION update_sitesettings_trigger_function()
+  // RETURNS TRIGGER AS $$
+  // DECLARE
+  //     batchAmount INTEGER;
+  //     dailyWinners INTEGER;
+  //     i INTEGER;
+  //     memberRecords RECORD;
+  //     drawerRecord RECORD;
+  //     timeoutSeconds INTEGER;
+  //     countdownSeconds INTEGER;
+  //     drawStartedAt timestamp;
+  // BEGIN
+  //     IF NEW.drawstarted = true THEN
+  //         -- Fetch batch_amount from the 1st row of sitesettings table
+  //         SELECT batch_amount INTO batchAmount FROM sitesettings LIMIT 1;
+  //         -- Fetch daily_winners from the 1st row of sitesettings table
+  //         SELECT daily_winners INTO dailyWinners FROM sitesettings LIMIT 1;
+  //         -- Fetch draw_timeout from the 1st row of sitesettings table
+  //         SELECT draw_timeout INTO timeoutSeconds FROM sitesettings LIMIT 1;
+  //         -- Fetch member_spin_timeout from the 1st row of sitesettings table
+  //         SELECT member_spin_timeout INTO countdownSeconds FROM sitesettings LIMIT 1;
+  //         -- Fetch drawStartedAt from the 1st row of sitesettings table
+  //         SELECT drawStartedAt INTO drawStartedAt FROM sitesettings LIMIT 1;
+  
+  //         -- Check if batchAmount, dailyWinners, and timeoutSeconds are not null and greater than 0
+  //         IF batchAmount IS NOT NULL AND batchAmount > 0 
+  //         AND dailyWinners IS NOT NULL AND dailyWinners > 0 
+  //         AND timeoutSeconds IS NOT NULL AND timeoutSeconds > 0
+  //         AND countdownSeconds IS NOT NULL AND countdownSeconds > 0 
+  //         AND drawSartedAt IS NOT NULL THEN
+  //             -- Loop batchAmount times
+  //             FOR i IN 1..batchAmount LOOP
+  //                 -- Loop dailyWinners times
+  //                 FOR j IN 1..dailyWinners LOOP
+  //                     -- Fetch a random winner from the member records
+  //                     SELECT * FROM members WHERE batch_number = i AND isOnline = true ORDER BY RANDOM() LIMIT 1 INTO drawerRecord;
+                      
+  //                     -- Check if a drawer is found
+  //                     IF drawerRecord IS NOT NULL THEN
+  //                         -- Insert into Draw table with drawerRecord values and countdown
+  //                         INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, false, i);
+  //                     END IF;
+  //                 END LOOP;
+  //             END LOOP;
+  //         END IF;
+  //     ELSIF NEW.drawstarted = false THEN
+  //         -- Execute actions when 'drawstarted' is changed to false
+  //         -- For example:
+  //         -- RAISE NOTICE 'Draw stopped';
+  //         -- Do something here...
+  //     END IF;
+  
+  //     RETURN NEW;
+  // END;
+  // $$ LANGUAGE plpgsql;
+  // `
+  const drawTriggerQuery = `
+  CREATE OR REPLACE FUNCTION update_sitesettings_trigger_function()
+  RETURNS TRIGGER AS $$
+  DECLARE
+      batchAmount INTEGER;
+      dailyWinners INTEGER;
+      i INTEGER;
+      memberRecord RECORD;
+      drawerRecord RECORD;
+      timeoutSeconds INTEGER;
+      countdownSeconds INTEGER;
+      drawStartedAt TIMESTAMP;
+  BEGIN
+      IF NEW.drawstarted = true THEN
+          -- Fetch settings from sitesettings table
+          SELECT batch_amount, daily_winners, draw_timeout, member_spin_timeout, draw_started_at 
+          INTO batchAmount, dailyWinners, timeoutSeconds, countdownSeconds, drawStartedAt 
+          FROM sitesettings LIMIT 1;
+  
+          -- Check if settings are valid
+          IF batchAmount IS NOT NULL AND batchAmount > 0 
+          AND dailyWinners IS NOT NULL AND dailyWinners > 0 
+          AND timeoutSeconds IS NOT NULL AND timeoutSeconds > 0
+          AND countdownSeconds IS NOT NULL AND countdownSeconds > 0 
+          AND drawStartedAt IS NOT NULL THEN
+              -- Update drawStarted to false if the countdown reaches zero
+              -- UPDATE sitesettings SET drawstarted = false WHERE CURRENT_TIMESTAMP - draw_started_at >= interval '1 second' * timeoutSeconds;
+  
+              -- Loop batchAmount times
+              FOR i IN 1..batchAmount LOOP
+                  -- Fetch a random winner from the member records who hasn't been selected before in this batch and draw_date is equal to current_timestamp in MMMdyyyy format
+                  SELECT * FROM members 
+                  WHERE batch_number = i 
+                  AND isOnline = true 
+                  AND id NOT IN (
+                    SELECT drawn_by FROM Draw WHERE batch_number = i
+                    AND TO_CHAR(CURRENT_TIMESTAMP, 'MMMdyyyy') = TO_CHAR(draw_date, 'MMMdyyyy')
+                  ) 
+                  ORDER BY RANDOM() LIMIT 1 INTO drawerRecord;
+                  
+                  -- Check if a drawer is found
+                  IF drawerRecord IS NOT NULL THEN
+                      -- Insert into Draw table with drawerRecord values and countdown
+                      INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
+                      VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, false, i);
+                  ELSE
+                      -- No more eligible winners found
+                      EXIT;
+                  END IF;
+              END LOOP;
+          END IF;
+      ELSIF NEW.drawstarted = false THEN
+          -- Execute actions when 'drawstarted' is changed to false
+          -- For example:
+          -- RAISE NOTICE 'Draw stopped';
+          -- Do something here...
+      END IF;
+  
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
 
+  -- CREATE OR REPLACE TRIGGER update_sitesettings_trigger
+  -- AFTER UPDATE ON sitesettings
+  -- FOR EACH ROW
+  -- EXECUTE FUNCTION update_sitesettings_trigger_function();
+
+  `
+  const countdownTriggerQuery = `
+  CREATE OR REPLACE FUNCTION update_countdown_trigger_function()
+  RETURNS TRIGGER AS $$
+  DECLARE
+      initialCountdownMinutes INTEGER;
+      initialCountdownSeconds INTEGER;
+  BEGIN
+      IF NEW.drawstarted = true THEN
+          -- Fetch initial countdown value from sitesettings table (in minutes)
+          SELECT draw_timeout INTO initialCountdownMinutes FROM sitesettings LIMIT 1;
+          
+          IF initialCountdownMinutes IS NOT NULL THEN
+              -- Convert initial countdown value from minutes to seconds
+              initialCountdownSeconds := initialCountdownMinutes * 60;
+              
+              -- Update countdown value in sitesettings table with the initial value
+              UPDATE sitesettings SET countdown = initialCountdownSeconds;
+              
+              -- Update countdown every second until it reaches 0
+              LOOP
+                  -- Update countdown value
+                  UPDATE sitesettings SET countdown = countdown - 1;
+                  
+                  -- Check if countdown reached 0
+                  IF NEW.countdown = 0 THEN
+                      -- Set drawStarted to false
+                      UPDATE sitesettings SET drawstarted = false;
+                      EXIT; -- Exit the loop
+                  END IF;
+                  
+                  -- Pause for 1 second
+                  PERFORM pg_sleep(1);
+              END LOOP;
+          END IF;
+      END IF;
+      
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE TRIGGER update_countdown_trigger
+  AFTER UPDATE ON sitesettings
+  FOR EACH ROW
+  WHEN (OLD.drawstarted IS DISTINCT FROM NEW.drawstarted OR OLD.countdown IS DISTINCT FROM NEW.countdown)
+  EXECUTE FUNCTION update_countdown_trigger_function();
+
+  `
+  const drawerSelectedTriggerQuery = `
+  CREATE OR REPLACE FUNCTION start_countdown_trigger_function()
+  RETURNS TRIGGER AS $$
+  DECLARE
+      initialCountdownSeconds INTEGER;
+      drawStartedValue BOOLEAN;
+      randomMemberId INTEGER;
+  BEGIN
+      IF NEW.timer > 0 THEN
+          -- Fetch initial countdown value from sitesettings table (in seconds)
+          SELECT member_spin_timeout INTO initialCountdownSeconds FROM sitesettings LIMIT 1;
+          
+          IF initialCountdownSeconds IS NOT NULL THEN
+              -- Update timer every second until it reaches 0
+              LOOP                
+                  -- Fetch drawstarted value from sitesettings table
+                  SELECT drawstarted INTO drawStartedValue FROM sitesettings LIMIT 1;
+                  
+                  -- Exit the loop if drawstarted is set to false
+                  IF drawStartedValue = FALSE THEN
+                      EXIT;
+                  END IF;
+              
+                  -- Check if the 'used' value is set to true
+                  IF NEW.used = TRUE THEN
+                      -- Stop the countdown if 'used' is set to true
+                      EXIT;
+                  END IF;
+                  
+                  -- Check if timer_finished is set to true
+                  -- IF NEW.timer_finished = TRUE THEN
+                  --     EXIT;
+                  -- END IF;
+                  
+                  -- Update timer value
+                  NEW.timer := NEW.timer - 1;
+                  
+                  -- Check if timer reached 0
+                  IF NEW.timer = 0 THEN                      
+                      -- Select a random member id from the members table meeting the criteria
+                      SELECT id INTO randomMemberId FROM members 
+                      WHERE batch_number = NEW.batch_number 
+                      AND isOnline = true 
+                      AND id NOT IN (
+                        SELECT drawn_by FROM Draw 
+                        WHERE batch_number = NEW.batch_number
+                        AND TO_CHAR(CURRENT_TIMESTAMP, 'MMMdyyyy') = TO_CHAR(draw_date, 'MMMdyyyy')
+                      ) 
+                      ORDER BY RANDOM() LIMIT 1;
+
+                      -- Check if a member is selected
+                      IF randomMemberId IS NOT NULL THEN
+                          -- Insert a new row into the Draw table with the selected member id
+                          INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
+                          VALUES (randomMemberId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, initialCountdownSeconds, false, NEW.batch_number, NEW.id);
+                          
+                          -- Set timer_finished to true
+                          -- NEW.timer_finished := true;
+                      END IF;
+                      EXIT; -- Exit the loop
+                      -- Pause for 1 second
+                      PERFORM pg_sleep(1);
+                  END IF;
+              END LOOP;
+          END IF;
+      END IF;
+      
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE TRIGGER start_countdown_trigger
+  AFTER INSERT ON Draw
+  FOR EACH ROW
+  EXECUTE FUNCTION start_countdown_trigger_function();
+  `
+  const checkDrawStartedTriggerQuery = `
+  CREATE OR REPLACE FUNCTION check_draw_started()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      IF NOT EXISTS (SELECT 1 FROM sitesettings WHERE drawstarted = true) THEN
+          RAISE EXCEPTION 'Draw has not started. Cannot insert into Draw table.';
+      END IF;
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE TRIGGER enforce_draw_started
+  BEFORE INSERT ON Draw
+  FOR EACH ROW
+  EXECUTE FUNCTION check_draw_started();
+`
+
+  try {
+    await pool.query(checkDrawStartedTriggerQuery)
+    .then(() => {
+        console.log("Check draw started trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating check draw started trigger:", error);
+    });
+    await pool.query(drawTriggerQuery)
+    .then(() => {
+        console.log("DrawStart trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger draw started:", error);
+    });
+    await pool.query(countdownTriggerQuery)
+    .then(() => {
+        console.log("Countdown trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger countdown:", error);
+    });
+    await pool.query(drawerSelectedTriggerQuery)
+    .then(() => {
+        console.log("Drawer Selected trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger drawer selected:", error);
+    });
+    
+  } catch (error) {
+    console.log(error);
+    
+  }
+  
+}
+createTriggers()
 // Route for uploading image
 app.post('/uploadImage', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    // console.log(req.body);
 
     // File uploaded successfully
     let updateQuery = '';
@@ -493,6 +794,17 @@ app.post('/loginStaff', async (req, res) => {
       console.error('Error during member deletion', error);
       res.status(500).json({ message: 'Internal Server Error' });
     }
+  });  
+  // Endpoint to delete a user
+  app.delete('/deleteUser/:id', async (req, res) => {
+    const memberId = req.params.id;
+    try {
+      await pool.query('DELETE FROM Users WHERE id = $1', [memberId]);
+      res.status(200).json({ message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Error during user deletion', error);
+      res.status(500).json({ message: 'Internal Server Error' });
+    }
   });
   
   // Endpoint to deposit money
@@ -586,12 +898,13 @@ app.post('/start-draw', async (req, res) => {
   // Endpoint to start draw
   app.post('/startDraw', async (req, res) => {
     try {
-      const { drawStarted } = req.body;
-      console.log(drawStarted);
+      const { drawstarted } = req.body;
+      console.log(drawstarted);
       const setting = await pool.query('SELECT * FROM sitesettings');
       // console.log(setting.rows[0]);
-      await pool.query('UPDATE SiteSettings SET drawStarted = $1 WHERE id = $2', [drawStarted, setting.rows[0].id]).then(()=>{
-        res.status(200).json({ message: `Draw ${drawStarted ? "started" : "stopped"} successfully` });
+      await pool.query('UPDATE SiteSettings SET drawstarted = $1 WHERE id = $2', [drawstarted, setting.rows[0].id]).then(async()=>{
+        const setting = await pool.query('SELECT * FROM sitesettings');
+        res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: setting.rows[0]});
       });
     } catch (error) {
       console.error('Error starting draw', error);
@@ -944,7 +1257,7 @@ app.post('/updateSiteSettings', async (req, res)=>{
     const user = checkUser.rows[0]
     // console.log(user);
     // console.log(checkUser.rowCount);
-    if (user && user.role == 'Admin') {
+    if (user && user.role.trim() == 'Admin') {
       const tableName = 'siteSettings'; // Specify your table name
 
       // Construct the dynamic column-value pairs from the JSON data, excluding null values
@@ -989,7 +1302,7 @@ app.post('/updateSiteSettings', async (req, res)=>{
 
     }
     else{
-      console.error(`User is not authorized`);
+      console.error(`User is not authorized: ${user.role}`);
       res.status(400).json({ message: `User is not authorized!` });
     }
     
@@ -1132,14 +1445,13 @@ app.post('/saveMember', async (req, res) => {
     }
   } catch (error) {
     console.error('Error saving member:', error.message);
-    return res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: `Internal server error, ${error.message}` });
   }
 });
 
 app.post('/saveUser', async (req, res) => {
   try {
     const { userData, edit, memberId } = req.body;
-
     // Check if required body parameters are missing
     if (!userData || edit == null) {
       return res.status(400).json({ message: 'Required body parameters are missing' });
@@ -1176,13 +1488,13 @@ app.post('/saveUser', async (req, res) => {
     }
   
     else {
-
       // Check if the phone number is unique and has not been used already
       const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM users WHERE phone = $1';
       const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
       const phoneExists = phoneExistsResult.rows[0].count > 0;
 
       if (phoneExists) {
+        console.error('Phone number already exists');
         return res.status(400).json({ message: 'Phone number already exists' });
       }
       // If edit is false, construct the INSERT query dynamically
@@ -1193,7 +1505,7 @@ app.post('/saveUser', async (req, res) => {
       Object.keys(userData).forEach(key => {
           if (userData[key] !== null) {
               insertColumns += `"${key}", `;
-              if (key === 'added_at') {
+              if (key === 'created_at') {
                   insertPlaceholders += 'NOW(), ';
               } else {
                   insertPlaceholders += `$${index}, `;
@@ -1221,7 +1533,7 @@ app.post('/saveUser', async (req, res) => {
     }
   } catch (error) {
     console.error('Error saving user:', error.message);
-    return res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: `Internal server error, ${error.message}` });
   }
 });
 
