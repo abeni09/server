@@ -367,7 +367,7 @@ async function createTables() {
         lastDate varchar(10),
         isOnline BOOLEAN,
         isBanned BOOLEAN,
-        pot INTEGER,
+        batch_number INTEGER,
         winAmount DECIMAL(10, 2),
         won BOOLEAN,
         city VARCHAR(20),
@@ -864,8 +864,6 @@ app.post('/uploadImage', upload.single('file'), async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-
 app.post('/loginStaff', async (req, res) => {
     try {
         const { phone, password, confirm } = req.body;
@@ -906,7 +904,6 @@ app.post('/loginStaff', async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 });
-
 app.post('/loginMember', async (req, res) => {
     try {
         const { phone, password, confirm } = req.body;
@@ -947,146 +944,30 @@ app.post('/loginMember', async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 });
-
-
-  
-  // Endpoint to register a member
-  app.post('/registerMember', async (req, res) => {
-    const { email, password, name, phone } = req.body;
-    try {
-      await pool.query('INSERT INTO Members (email, password, name, phone) VALUES ($1, $2, $3, $4)', [email, password, name, phone]);
-      res.status(201).json({ message: 'Member registered successfully' });
-    } catch (error) {
-      console.error('Error during member registration', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to edit a member
-  app.put('/editMember/:id', async (req, res) => {
-    const memberId = req.params.id;
-    const { name, phone } = req.body;
-    try {
-      await pool.query('UPDATE Members SET name = $1, phone = $2 WHERE id = $3', [name, phone, memberId]);
-      res.status(200).json({ message: 'Member updated successfully' });
-    } catch (error) {
-      console.error('Error during member editing', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to delete a member
-  app.delete('/deleteMember/:id', async (req, res) => {
-    const memberId = req.params.id;
-    try {
-      await pool.query('DELETE FROM Members WHERE id = $1', [memberId]);
-      res.status(200).json({ message: 'Member deleted successfully' });
-    } catch (error) {
-      console.error('Error during member deletion', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });  
-  // Endpoint to delete a user
-  app.delete('/deleteUser/:id', async (req, res) => {
-    const memberId = req.params.id;
-    try {
-      await pool.query('DELETE FROM Users WHERE id = $1', [memberId]);
-      res.status(200).json({ message: 'User deleted successfully' });
-    } catch (error) {
-      console.error('Error during user deletion', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to deposit money
-app.post('/depositMoney', async (req, res) => {
-    const { memberId, amount } = req.body;
-    try {
-      await pool.query('UPDATE Deposit SET amount = amount + $1 WHERE id = $2', [amount, memberId]);
-      res.status(200).json({ message: 'Money deposited successfully' });
-    } catch (error) {
-      console.error('Error during money deposit', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  // API endpoint for uploading images
-app.post('/upload', upload.single('image'), (req, res) => {
-    // Handle image upload
-    const file = req.file;
-    // Store the image in your chosen location (e.g., file system, cloud storage)
-    // Generate a unique filename or identifier for the image
-    const fileName = `${Date.now()}_${file.originalname}`;
-    fs.renameSync(file.path, path.join('images', fileName)); // Move the uploaded file to the 'images' folder
-    // Store the image URL or identifier in your database
-    const imageUrl = `/images/${fileName}`;
-    // Respond with the image URL or identifier
-    res.json({ imageUrl });
+// Endpoint to register a member
+app.post('/registerMember', async (req, res) => {
+  const { email, password, name, phone } = req.body;
+  try {
+    await pool.query('INSERT INTO Members (email, password, name, phone) VALUES ($1, $2, $3, $4)', [email, password, name, phone]);
+    res.status(201).json({ message: 'Member registered successfully' });
+  } catch (error) {
+    console.error('Error during member registration', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+// Endpoint to edit a member
+app.put('/editMember/:id', async (req, res) => {
+  const memberId = req.params.id;
+  const { name, phone } = req.body;
+  try {
+    await pool.query('UPDATE Members SET name = $1, phone = $2 WHERE id = $3', [name, phone, memberId]);
+    res.status(200).json({ message: 'Member updated successfully' });
+  } catch (error) {
+    console.error('Error during member editing', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 });
 
-app.post('/start-draw', async (req, res) => {
-    try {
-      const { drawStarted } = req.body;
-  
-      if (typeof drawStarted !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'Request body is missing.' });
-      }   
-      console.log(drawStarted);
-      await pool.query('UPDATE SiteSettings SET drawStarted = $1 WHERE id = 1', [drawStarted]);
-      res.status(200).json({ success: true, message: `message: ${drawStarted}`});
-    } catch (error) {
-      console.error('Error starting draw:', error);
-      res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
-  });
-  // Endpoint to update site settings
-//   app.post('/updateSiteSettings', async (req, res) => {
-//     try {
-//         if (!req.body || !req.body.editedItem) {
-//             console.log('Request body or editedItem is missing');
-//             return res.status(400).json({ success: false, message: 'Request body or editedItem is missing.' });
-//         }
-        
-//         const editedItem = req.body.editedItem; // Corrected destructuring
-
-//         // Check if the record exists in the SiteSettings table
-//         const checkResult = await pool.query('SELECT id FROM SiteSettings WHERE id = 1');
-
-//         let query;
-//         let queryParams;
-//         if (checkResult.rows.length > 0) {
-//             // Data exists, update the record
-//             query = `
-//                 UPDATE SiteSettings 
-//                 SET ${Object.keys(editedItem).map((key, index) => `${key} = $${index + 1}`).join(', ')}
-//                 WHERE id = 1`;
-//             queryParams = Object.values(editedItem);
-//         } else {
-//             // Data does not exist, insert the record
-//             query = `
-//                 INSERT INTO SiteSettings (
-//                     id,
-//                     ${Object.keys(editedItem).join(', ')}
-//                 ) VALUES (
-//                     1,
-//                     ${Object.keys(editedItem).map((key, index) => `$${index + 1}`).join(', ')}
-//                 )`;
-//             queryParams = Object.values(editedItem);
-//         }
-
-//         await pool.query(query, queryParams);
-
-//         const statusCode = checkResult.rows.length > 0 ? 200 : 201;
-//         const message = checkResult.rows.length > 0 ? 'Site settings updated successfully' : 'Site settings inserted successfully';
-//         res.status(statusCode).json({ message });
-//     } catch (error) {
-//         console.error('Error checking and updating site settings', error);
-//         res.status(500).json({ message: 'Internal Server Error' });
-//     }
-// });
-
-
-  
-// Endpoint to start draw
 app.post('/startDraw', async (req, res) => {
   try {
     const { drawstarted } = req.body;
@@ -1109,150 +990,170 @@ app.post('/startDraw', async (req, res) => {
   }
 });
 
-  // Endpoint to fetch winners
-  app.get('/fetchWinners', async (req, res) => {
-    try {
-      const winners = await pool.query('SELECT * FROM Winners');
-      res.status(200).json({ winners: winners.rows });
-    } catch (error) {
-      console.error('Error fetching winners', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to fetch members
-  app.get('/fetchMembers', async (req, res) => {
-    try {
-      // const members = await pool.query('SELECT * FROM Members order by id limit 10');
-      const members = await pool.query('SELECT * FROM Members');
-      console.log("Members Count:", members.rowCount);
-      res.status(200).json({ members: members.rows });
-    } catch (error) {
-      console.error('Error fetching members', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  }); 
-  // Endpoint to fetch Deposits
-  app.get('/fetchDeposits', async (req, res) => {
-    try {
-      const Deposits = await pool.query('SELECT * FROM Deposit');
-      console.log("Deposits Count:", Deposits.rowCount);
-      res.status(200).json({ deposits: Deposits.rows });
-    } catch (error) {
-      console.error('Error fetching Deposits', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });  
-  // Endpoint to fetch members
-  app.get('/fetchUsers', async (req, res) => {
-    try {
-      const users = await pool.query('SELECT * FROM Users');
-      console.log("Users Count:", users.rowCount);
-      res.status(200).json({ users: users.rows });
-    } catch (error) {
-      console.error('Error fetching users', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to fetch member info
-  app.get('/fetchMemberInfo/:id', async (req, res) => {
-    const memberId = req.params.id;
-    try {
-      const memberInfo = await pool.query('SELECT * FROM Members WHERE id = $1', [memberId]);
-      res.status(200).json({ memberInfo: memberInfo.rows[0] });
-    } catch (error) {
-      console.error('Error fetching member info', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to set winner
-  app.post('/setWinner', async (req, res) => {
-    const { drawnBy, lottoNumber, wonAmount } = req.body;
-    try {
-      await pool.query('INSERT INTO Winners (drawn_at, drawn_by, lotto_number, won_amount) VALUES (NOW(), $1, $2, $3)', [drawnBy, lottoNumber, wonAmount]);
-      res.status(201).json({ message: 'Winner set successfully' });
-    } catch (error) {
-      console.error('Error setting winner', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to stop spinner
-  app.post('/stopSpinner', async (req, res) => {
-    try {
-      // Implementation to stop spinner
-      res.status(200).json({ message: 'Spinner stopped successfully' });
-    } catch (error) {
-      console.error('Error stopping spinner', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to add user
-  app.post('/addUser', async (req, res) => {
-    const newUser = req.body;
-    try {
-      await pool.query('INSERT INTO Users (email, phone, name, role, updated_at, updated_by) VALUES ($1, $2, $3, $4, NOW(), $5)', [newUser.email, newUser.phone, newUser.name, newUser.role, newUser.updatedBy]);
-      res.status(201).json({ message: 'User added successfully' });
-    } catch (error) {
-      console.error('Error adding user', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to edit user
-  app.put('/editUser/:id', async (req, res) => {
-    const userId = req.params.id;
-    const updatedUser = req.body;
-    try {
-      await pool.query('UPDATE Users SET email = $1, phone = $2, name = $3, role = $4, updated_at = NOW(), updated_by = $5 WHERE id = $6', [updatedUser.email, updatedUser.phone, updatedUser.name, updatedUser.role, updatedUser.updatedBy, userId]);
-      res.status(200).json({ message: 'User updated successfully' });
-    } catch (error) {
-      console.error('Error updating user', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to delete user
-  app.delete('/deleteUser/:id', async (req, res) => {
-    const userId = req.params.id;
-    try {
-      await pool.query('DELETE FROM Users WHERE id = $1', [userId]);
-      res.status(200).json({ message: 'User deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting user', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
-  // Endpoint to login user
-  app.post('/loginUser', async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const result = await pool.query('SELECT * FROM Users WHERE email = $1 AND password = $2', [email, password]);
-      if (result.rows.length === 1) {
-        res.status(200).json({ message: 'Login successful', data: result.rows[0] });
-      } else {
-        res.status(401).json({ message: 'Invalid email or password' });
-      }
-    } catch (error) {
-      console.error('Error during login', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  // Endpoint to delete all rows from a table
-  app.delete('/deleteAllRows/:tableName', async (req, res) => {
-    const tableName = req.params.tableName;
-    try {
-        await pool.query(`DELETE FROM ${tableName}`);
-        res.status(200).json({ message: `All rows deleted from ${tableName} successfully` });
-    } catch (error) {
-        console.error(`Error deleting rows from ${tableName}`, error);
-        res.status(500).json({ message: 'Internal Server Error' });
-    }
+// Endpoint to fetch winners
+app.get('/fetchWinners', async (req, res) => {
+  try {
+    const winners = await pool.query('SELECT * FROM Winners');
+    res.status(200).json({ winners: winners.rows });
+  } catch (error) {
+    console.error('Error fetching winners', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 });
+
+// Endpoint to fetch members
+app.get('/fetchMembers', async (req, res) => {
+  try {
+    // const members = await pool.query('SELECT * FROM Members order by id limit 10');
+    const members = await pool.query('SELECT * FROM Members order by id desc limit 1');
+    console.log("Members Count:", members.rowCount);
+    res.status(200).json({ members: members.rows });
+  } catch (error) {
+    console.error('Error fetching members', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});  
+app.get('/searchMembers/:column/:keyword', async (req, res) => {
+  try {
+    const column = req.params.column.toLowerCase();
+    let keyword = req.params.keyword;
+
+    // Check if the column is of type int
+    const intColumns = ['id', 'age', 'batch_number']; // Add more integer columns as needed
+    if (intColumns.includes(column)) {
+      // Convert keyword to an integer
+      keyword = parseInt(keyword);
+      if (isNaN(keyword)) {
+        return res.status(400).json({ message: 'Invalid keyword for integer column' });
+      }
+    } else {
+      // For non-integer columns, add wildcard symbols for partial matching
+      keyword = `%${keyword}%`;
+    }
+
+    // Fetching valid column names from the predefined list
+    const validColumns = ['name', 'phone' , 'age', 'gender', 'batch_number'];
+
+    if (!validColumns.includes(column)) {
+      console.log("invalid column name", column);
+      console.log(validColumns);
+      return res.status(400).json({ message: 'Invalid column name' });
+    }
+
+    // Construct the SQL query
+    let query;
+    if (intColumns.includes(column)) {
+      query = `SELECT * FROM Members WHERE ${column} = $1 ORDER BY id DESC`;
+    } else {
+      query = `SELECT * FROM Members WHERE ${column} ILIKE $1 ORDER BY id DESC`;
+    }
+
+    // Execute the query
+    const results = await pool.query(query, [keyword]);
+    
+    console.log("Search result count:", results.rowCount);
+    res.status(200).json({ results: results.rows });
+  } catch (error) {
+    console.error('Error fetching results', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Endpoint to fetch Deposits
+app.get('/fetchDeposits', async (req, res) => {
+  try {
+    const Deposits = await pool.query('SELECT * FROM Deposit');
+    console.log("Deposits Count:", Deposits.rowCount);
+    res.status(200).json({ deposits: Deposits.rows });
+  } catch (error) {
+    console.error('Error fetching Deposits', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});  
+// Endpoint to fetch members
+app.get('/fetchUsers', async (req, res) => {
+  try {
+    const users = await pool.query('SELECT * FROM Users');
+    console.log("Users Count:", users.rowCount);
+    res.status(200).json({ users: users.rows });
+  } catch (error) {
+    console.error('Error fetching users', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Endpoint to fetch member info
+app.get('/fetchMemberInfo/:id', async (req, res) => {
+  const memberId = req.params.id;
+  try {
+    const memberInfo = await pool.query('SELECT * FROM Members WHERE id = $1', [memberId]);
+    res.status(200).json({ memberInfo: memberInfo.rows[0] });
+  } catch (error) {
+    console.error('Error fetching member info', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});  
+// Endpoint to fetch deposits
+app.get('/fetchDeposit/:id', async (req, res) => {
+  const memberId = req.params.id;
+  try {
+    const deposits = await pool.query('SELECT * FROM deposit WHERE deposited_for = $1 order by id desc', [memberId]);
+    res.status(200).json({ deposits: deposits.rows });
+  } catch (error) {
+    console.error('Error fetching deposits', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+// Endpoint to fetch lottNumbers
+app.get('/fetchLottoNumbers/:id', async (req, res) => {
+  const memberId = req.params.id;
+  try {
+    const lottNumbers = await pool.query('SELECT * FROM lottonumbers WHERE member = $1 order by id desc', [memberId]);
+    res.status(200).json({ lottNumbers: lottNumbers.rows });
+  } catch (error) {
+    console.error('Error fetching lottNumbers', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.post('/stopSpinner', async (req, res) => {
+  try {
+    const { drawnBy, deposit, winnerMember } = req.body;
+
+    // Step 1: Check if conditions are met
+    const checkQuery = `
+      SELECT * 
+      FROM Draw 
+      WHERE id = $1 AND drawn_by = $2 AND used = false AND timer > 0
+    `;
+    const checkResult = await pool.query(checkQuery, [deposit, drawnBy]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(400).json({ message: 'Conditions not met for stopping spinner' });
+    }
+
+    // Step 2: Update the row's used value to true
+    const updateQuery = `
+      UPDATE Draw
+      SET used = true
+      WHERE id = $1
+    `;
+    await pool.query(updateQuery, [deposit]);
+
+    // Step 3: Insert a row in the winners table
+    const insertQuery = `
+      INSERT INTO winners (member_name, deposit_id)
+      VALUES ($1, $2)
+    `;
+    await pool.query(insertQuery, [winnerMember, deposit]);
+
+    res.status(200).json({ message: 'Spinner stopped successfully' });
+  } catch (error) {
+    console.error('Error stopping spinner', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+  
 // Endpoint to fetch SiteSettings from a table
 app.get('/fetchSiteSettings', async (req, res) => {
   // const tableName = req.params.tableName;
@@ -1270,31 +1171,6 @@ app.get('/fetchSiteSettings', async (req, res) => {
       console.error(`Error fetching site settings`, error);
       res.status(500).json({ message: 'Internal Server Error' });
   }
-});
-app.post('/processDeposit', async (req, res) => {
-  var countStart;
-  // var Start = 23250;
-  try {
-    countStart = parseInt((await pool.query('SELECT * FROM public.lottonumbers order by lotto_number desc limit 1')).rows[0].lotto_number) + 1    
-  } catch (error) {
-    countStart = 0    
-  }
-  const Start = countStart/90
-  console.log('Start:', Start);
-  console.log('countStart:', countStart);
-  // try {
-  processDeposit(countStart, Start).then(()=>{
-  
-    res.status(200).json({ message: 'Deposits processed successfully' });
-
-  });
-  // } catch (error) {
-  //     console.error('Error processing deposits and fetching members', error);
-  //     Start = (await pool.query('SELECT * FROM public.lottonumbers order by id desc')).rowCount
-  //     countStart = Start/90
-  //     processDeposit(countStart, Start)
-  //     // res.status(500).json({ message: 'Internal Server Error' });
-  // }
 });
 
 // // Endpoint to process deposit, fetch members, and perform required operations
@@ -1320,7 +1196,7 @@ app.post('/processDeposit', async (req, res) => {
 //           const member = members[i];
 //           console.log(member.id);
 //             const memberId = member.id;
-//             const batchNumber = parseInt(member.pot);
+//             const batchNumber = parseInt(member.batch_number);
 //             const winner = member.won;
             
 //             if (member.lastDate != null) {
@@ -1645,6 +1521,33 @@ app.post('/saveMember', async (req, res) => {
     return res.status(500).json({ message: `Internal server error, ${error.message}` });
   }
 });
+app.delete('/deleteUser/:id', async (req, res) => {
+  try {
+    const UserId = req.params.id;
+
+    // Check if UserId is provided
+    if (!UserId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    // Check if the User exists
+    const UserExistQuery = 'SELECT * FROM Users WHERE id = $1';
+    const UserExistResult = await pool.query(UserExistQuery, [UserId]);
+
+    if (UserExistResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete the User
+    const deleteUserQuery = 'DELETE FROM Users WHERE id = $1';
+    await pool.query(deleteUserQuery, [UserId]);
+
+    return res.status(200).json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting User:', error.message);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 app.post('/saveUser', async (req, res) => {
   try {
@@ -1733,7 +1636,50 @@ app.post('/saveUser', async (req, res) => {
     return res.status(500).json({ message: `Internal server error, ${error.message}` });
   }
 });
+app.post('/processBulkDeposit', async (req, res) => {
+  var countStart;
+  // var Start = 23250;
+  try {
+    countStart = parseInt((await pool.query('SELECT * FROM public.lottonumbers order by lotto_number desc limit 1')).rows[0].lotto_number) + 1    
+  } catch (error) {
+    countStart = 0    
+  }
+  const Start = countStart/90
+  console.log('Start:', Start);
+  console.log('countStart:', countStart);
+  // try {
+  processDeposit(countStart, Start).then(()=>{
+  
+    res.status(200).json({ message: 'Deposits processed successfully' });
 
+  });
+  // } catch (error) {
+  //     console.error('Error processing deposits and fetching members', error);
+  //     Start = (await pool.query('SELECT * FROM public.lottonumbers order by id desc')).rowCount
+  //     countStart = Start/90
+  //     processDeposit(countStart, Start)
+  //     // res.status(500).json({ message: 'Internal Server Error' });
+  // }
+});
+app.post('/processDeposit', async (req, res) => {
+  // var countStart = 0;
+  // var Start = 23250;
+  try {
+    const { amount, user, penality, member } = req.body;
+    processDeposit(amount,user, penality, member).then((success)=>{
+      if (success) {
+        res.status(200).json({ message: 'Deposits processed successfully' });
+      }
+      else{      
+        res.status(500).json({ message: 'Faild to process deposit' });
+      }
+  
+    });
+  } 
+  catch (error) {
+    console.error('Error processing deposits and fetching members', error);
+  }
+});
 // Endpoint to generate members
 app.post('/generateMembers', async (req, res) => {
   try {
@@ -1770,31 +1716,154 @@ app.post('/generateMembers', async (req, res) => {
       res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+async function processDeposit(amount, user, penality, memberID){
+  try {  
+    var countStart = 0
+    const siteSettingQuery = await pool.query('SELECT * FROM SiteSettings');
+    const settings = siteSettingQuery.rows[0];
+    
+    const membersQuery = await pool.query('SELECT * FROM Members where id = $1', [memberID]);
+    const members = membersQuery.rows;
+    const startAt = Date.now();
+  
+    // Prepare data for bulk insertion
+    var bulkLottoNumberData = [];
+    var bulkDailyContributionData = [];
+    var bulkServiceFeeData = [];
+    const member = members[0];
+    const memberId = parseInt(member.id);
+    const batchNumber = parseInt(member.batch_number);
+    const winner = member.won;
+    var daysDifference = 0;
+    var formattedDate;
+    var lottoSettingExists = false;
+    
+    if (member.lastDate != null) {
+        daysDifference = daysAheadOfToday(member.lastDate);
+    }
+    console.log(member.name);
+    
+    // Insert deposit into Deposit table
+    const newDepositQuery = await pool.query(
+        `INSERT INTO Deposit (deposited_at, deposited_by, deposited_for, amount) 
+        VALUES (NOW(), $1, $2, $3) RETURNING id`,
+        [user, memberId, amount]
+    );
+    const depositId = newDepositQuery.rows[0].id; // Retrieve the inserted ID
 
-// app.post('/generateMembers', async (req, res) => {
-//   try {
-//       const count = req.body.count || 100; // Default to generating 100 members if count is not provided
-//       const startTime = Date.now();
-      
-//       const members = [];
-//       for (let i = 0; i < count; i++) {
-//           const member = generateMember(i); // Call a function to generate member data
-//           members.push(member);
-//       }
-      
-//       await insertMember(members); // Batch insert the generated members into the database
-      
-//       const endTime = Date.now();
-//       const diff = (endTime - startTime) / 1000;
-//       res.status(201).json({ message: `${count} members generated successfully in ${diff} seconds` });
-//   } catch (error) {
-//       console.error('Error generating members', error);
-//       res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
+    var dailyContribution = parseInt(settings.deposit_contribution_before);
+    if (winner) {
+        dailyContribution = parseInt(settings.deposit_contribution_after);
+    }
 
-async function processDeposit(initCountStart, initStart){
-  try {  const amount = 4500;
+    if (winner && penality != 0) {
+        await pool.query(
+            `INSERT INTO PenalityFee (date, days, member, deposit, amount) 
+            VALUES ($1, $2, $3, $4, $5)`,
+            [formatDateNow(0), penality/parseInt(settings.penality_fee), memberId, depositId, penality]
+        ).then(()=>{
+            console.log(`Penalized ${penality} member with ID: ${memberId}`);
+        })
+    }
+    // Calculate number of lotto numbers based on total amount and daily contribution
+    numberOfLottoNumbers = Math.floor(amount / dailyContribution);
+    console.log(batchNumber);
+    // const LottoSettingsQuery = await pool.query('SELECT * FROM LottoSetting WHERE batch_number = $1', [batchNumber]);
+        
+    // if (LottoSettingsQuery.rowCount > 0) {
+    //   lottoSettingExists = true;
+    // }
+    // Insert into LottoNumbers table for each lotto number
+    for (let j = 0; j < numberOfLottoNumbers; j++) {
+        var currentLottoNumberPadded = await pool.query('SELECT * FROM lottosetting where batch_number = $1 order by id desc limit 1', [batchNumber]);
+        if (currentLottoNumberPadded.rowCount == 1) {
+          lottoSettingExists = true;
+          countStart = parseInt(currentLottoNumberPadded.rows[0].current_lotto_number) + 1
+        }
+        else{
+          lottoSettingExists = false;
+        }
+        var currentLottoNumber = (countStart).toString().padStart(9, '0');
+
+        formattedDate = formatDateNow(daysDifference != 0 ? j + daysDifference + 1 : j + daysDifference);
+        
+        if (!lottoSettingExists) {
+          await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, batchNumber])            
+        } else {
+          await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
+        }
+            
+        await pool.query('UPDATE Members SET lastDate = $1 WHERE id = $2', [formattedDate, memberId]);
+        
+        if (!winner) {
+          bulkLottoNumberData.push([batchNumber, 'NOW()', currentLottoNumber, dailyContribution, depositId, false, false, memberId]);
+        }
+        else{
+          bulkServiceFeeData.push([formattedDate, memberId, depositId, settings.service_fee]);
+        
+        }
+        bulkDailyContributionData.push([formattedDate, memberId, depositId, dailyContribution, false]);
+        
+    }
+      // Check if bulk lists are not empty
+      const promises = [];
+      // For ServiceFee table
+      if (bulkServiceFeeData.length > 0) {
+        const serviceFeeQuery = `
+            INSERT INTO ServiceFee (date, member, deposit, amount) 
+            VALUES 
+            ${bulkServiceFeeData.map((_, index) => `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`).join(', ')}
+        `;
+        const serviceFeeValues = bulkServiceFeeData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
+        promises.push(pool.query(serviceFeeQuery, serviceFeeValues));
+      }
+
+      // For LottoNumbers table
+      if (bulkLottoNumberData.length > 0) {
+        const lottoNumbersQuery = `
+            INSERT INTO LottoNumbers (batch_number, deposited_at, lotto_number, daily_contributed_amount, deposit, winner, expired, member) 
+            VALUES 
+            ${bulkLottoNumberData.map((_, index) => `($${index * 8 + 1}, $${index * 8 + 2}, $${index * 8 + 3}, $${index * 8 + 4}, $${index * 8 + 5}, $${index * 8 + 6}, $${index * 8 + 7}, $${index * 8 + 8})`).join(', ')}
+        `;
+        const lottoNumbersValues = bulkLottoNumberData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
+        promises.push(pool.query(lottoNumbersQuery, lottoNumbersValues));
+      }  
+  
+      if (bulkDailyContributionData.length > 0) {
+        const query = `
+            INSERT INTO DailyContribution (date, member, deposit, amount, expired)
+            VALUES 
+            ${bulkDailyContributionData.map((_, index) => `($${index * 5 + 1}, $${index * 5 + 2}, $${index * 5 + 3}, $${index * 5 + 4}, $${index * 5 + 5})`).join(', ')}
+        `;
+        const values = bulkDailyContributionData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
+        promises.push(pool.query(query, values));
+      }
+    
+      // Execute queries if there are any
+      if (promises.length > 0) {
+          await Promise.all(promises);
+      }
+      
+      const endAt = Date.now();
+      const diff = endAt - startAt
+      console.log('minutes took: ',diff/60000);
+      bulkDailyContributionData = []
+      bulkLottoNumberData = []
+      bulkMembersData = []
+      bulkDepositData = []
+      return true;
+    
+  } catch (error) {
+    console.log(error);
+    return false;
+    // processDeposit(countStart, Start)
+    
+  }
+
+}
+async function processBulkDeposit(initCountStart, initStart){
+  try {  
+    const amount = 4500;
     const user = 1;
     const penality = 0;
     var Start = initStart
@@ -1834,7 +1903,7 @@ async function processDeposit(initCountStart, initStart){
           // console.log(Start);
           const member = members[i];
           const memberId = parseInt(member.id);
-          const batchNumber = parseInt(member.pot);
+          const batchNumber = parseInt(member.batch_number);
           const winner = member.won;
           var daysDifference = 0;
           var formattedDate;
@@ -1878,7 +1947,7 @@ async function processDeposit(initCountStart, initStart){
           }
           if (countStart == 0) {
             console.log("countstart", countStart);
-            // bulkMembersData.push(['Jun172024', memberId]);              
+            // bulkMembersData.push(['Jun182024', memberId]);              
           }
           // var currentLottoNumber = '000000000'; // Default value
           // Insert into LottoNumbers table for each lotto number
@@ -1918,9 +1987,9 @@ async function processDeposit(initCountStart, initStart){
           }
           // bulkLottoSettingData.push([formattedDate, memberId, depositId, dailyContribution, false]);
           // if (countStart == 0) {
-          //   await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, member.pot])            
+          //   await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, batchNumber])            
           // } else {
-          //   await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, member.pot])
+          //   await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
           // }
               
           // await pool.query('UPDATE Members SET lastDate = $1 WHERE id = $2', ['Jun172024', memberId]);
@@ -2014,115 +2083,86 @@ async function processDeposit(initCountStart, initStart){
   }
 
 }
-
-  
-  // Function to generate member data (example)
-  function generateMember(i, phone) {
-    const number = i.toString().padStart(6,'0')
-    const name = `Akalu${number}`;
-    const age = generateRandomAge(20, 40);
-    const gender = generateRandomGender();
-    // const phone = generateRandomPhoneNumber();
-    const pot = generateRandomPot();
-    const won = false;
-    const email = generateRandomEmail(name);
-    const id = generateRandomId(email);
-    // Implement your logic to generate member data here
-    return {
-      name: name,
-      age: age,
-      gender: gender,
-      phone: phone,
-      isOnline: true,
-      isBanned: false,
-      pot: pot,
-      winAmount: 1000000,
-      won: won
-    };
-  }
-  
-  // Function to insert a member into the database (example)
-  async function insertMember(member, i) {
-    try {
-      // Example query to insert a member into the Members table
-      await pool.query(
-        `INSERT INTO Members (name, age, gender, phone, isOnline, isBanned, pot, winAmount, won) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [member.name, member.age, member.gender, member.phone, member.isOnline, member.isBanned, member.pot, member.winAmount, member.won]
-      )
-      .then(()=>{
-        console.log("Member inserted successfully:", i);
-      });
-    } catch (error) {
-      console.error('Error inserting member into database', error);
-      throw error; // Propagate the error to the caller
-    }
-  }
-
-  async function insertMembers(members) {
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN'); // Start a transaction
-        
-        // Construct the SQL query to insert multiple members
-        const values = members.map((member, index) => `($${index * 9 + 1}, $${index * 9 + 2}, $${index * 9 + 3}, $${index * 9 + 4}, $${index * 9 + 5}, $${index * 9 + 6}, $${index * 9 + 7}, $${index * 9 + 8}, $${index * 9 + 9})`).join(',');
-        const queryText = `INSERT INTO Members (name, age, gender, phone, isOnline, isBanned, pot, winAmount, won) VALUES ${values}`;
-        
-        // Extract values from each member object
-        const memberValues = members.flatMap(member => [member.name, member.age, member.gender, member.phone, member.isOnline, member.isBanned, member.pot, member.winAmount, member.won]);
-        
-        // Execute the query with parameters
-        await client.query(queryText, memberValues);
-        
-        await client.query('COMMIT'); // Commit the transaction
-    } catch (error) {
-        await client.query('ROLLBACK'); // Rollback the transaction in case of error
-        throw error; // Rethrow the error to be caught by the caller
-    } finally {
-        client.release(); // Release the client back to the pool
-    }
+// Function to generate member data (example)
+function generateMember(i, phone) {
+  const number = i.toString().padStart(6,'0')
+  const name = `Akalu${number}`;
+  const age = generateRandomAge(20, 40);
+  const gender = generateRandomGender();
+  // const phone = generateRandomPhoneNumber();
+  const pot = generateRandomPot();
+  const won = false;
+  const email = generateRandomEmail(name);
+  const id = generateRandomId(email);
+  // Implement your logic to generate member data here
+  return {
+    name: name,
+    age: age,
+    gender: gender,
+    phone: phone,
+    isOnline: true,
+    isBanned: false,
+    batch_number: pot,
+    winAmount: 1000000,
+    won: won
+  };
 }
-
-
-
-  function generateRandomAge(min, max) {
-    return Math.floor(Math.random() * (max - min + 1) + min);
+async function insertMembers(members) {
+  const client = await pool.connect();
+  try {
+      await client.query('BEGIN'); // Start a transaction
+      
+      // Construct the SQL query to insert multiple members
+      const values = members.map((member, index) => `($${index * 9 + 1}, $${index * 9 + 2}, $${index * 9 + 3}, $${index * 9 + 4}, $${index * 9 + 5}, $${index * 9 + 6}, $${index * 9 + 7}, $${index * 9 + 8}, $${index * 9 + 9})`).join(',');
+      const queryText = `INSERT INTO Members (name, age, gender, phone, isOnline, isBanned, batch_number, winAmount, won) VALUES ${values}`;
+      
+      // Extract values from each member object
+      const memberValues = members.flatMap(member => [member.name, member.age, member.gender, member.phone, member.isOnline, member.isBanned, member.batch_number, member.winAmount, member.won]);
+      
+      // Execute the query with parameters
+      await client.query(queryText, memberValues);
+      
+      await client.query('COMMIT'); // Commit the transaction
+  } catch (error) {
+      await client.query('ROLLBACK'); // Rollback the transaction in case of error
+      throw error; // Rethrow the error to be caught by the caller
+  } finally {
+      client.release(); // Release the client back to the pool
+  }
 }
-
+function generateRandomAge(min, max) {
+  return Math.floor(Math.random() * (max - min + 1) + min);
+}
 function generateRandomGender() {
     return Math.random() < 0.5 ? 'Male' : 'Female';
 }
 function generateRandomPhoneNumber() {
-    // Randomly select '7' or '9' for the second digit
-    const secondDigit = Math.random() < 0.5 ? '7' : '9';
-  
-    // Generate the remaining 9 digits
-    let remainingDigits = '';
-    for (let i = 0; i < 8; i++) {
-      remainingDigits += Math.floor(Math.random() * 10);
-    }
-  
-    // Construct the complete phone number
-    const phoneNumber = `+251${secondDigit}${remainingDigits}`;
-  
-    return phoneNumber;
-  }
-  
+  // Randomly select '7' or '9' for the second digit
+  const secondDigit = Math.random() < 0.5 ? '7' : '9';
 
+  // Generate the remaining 9 digits
+  let remainingDigits = '';
+  for (let i = 0; i < 8; i++) {
+    remainingDigits += Math.floor(Math.random() * 10);
+  }
+
+  // Construct the complete phone number
+  const phoneNumber = `+251${secondDigit}${remainingDigits}`;
+
+  return phoneNumber;
+}
 function generateRandomPot() {
     // const pots = ['Pot 1', 'Pot 2', 'Pot 3', 'Pot 4', 'Pot 5', 'Pot 6', 'Pot 7', 'Pot 8', 'Pot 9', 'Pot 10'];
     // const pots = ['Batch 3'];
     const pots = [3];
     return pots[Math.floor(Math.random() * pots.length)];
 }
-
 function generateRandomEmail(name) {
     return `${name.replace(/\s+/g, '_').toLowerCase()}@gmail.com`;
 }
-
 function generateRandomId(email) {
     return email.replace(/[@.]/g, '');
 }
-
 function formatDateNow(days) {
     // Get the current date
     const currentDate = new Date();
@@ -2197,8 +2237,8 @@ function daysAheadOfToday(formattedDate) {
 
     return daysAhead;
 }
-  // Start the Express server
-  app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-  });
+// Start the Express server
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
   
