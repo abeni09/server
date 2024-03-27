@@ -9,6 +9,7 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const { setTimeout } = require('timers');
+const axios = require('axios'); // Import Axios for making HTTP requests
 // const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
@@ -94,6 +95,9 @@ const SECRET_KEY = 'DerashUserJWT';
 
 let DRAW_STARTED_AT = null;
 let Simulated_Days = null;
+let list_of_intervals = [];
+let drawTimer;
+let previousDrawStarted = null;
 // PostgreSQL database configuration
 const pool = new Pool({
     // ssl: {
@@ -129,7 +133,190 @@ async function dropTable(tableName) {
       console.error(`Error dropping table '${tableName}':`, err);
     }
   }
+// Function to start the draw timer
+function startDrawTimer(draw_timeout, server_url) {
+  const durationInSeconds = draw_timeout * 60; // convert the minutes to seconds
+  drawTimer = setTimeout(async () => {
+    // After the duration, set drawStarted to false
+    try {
+      await axios.post(`${server_url}/startDraw`, { drawStarted: false });
+      // console.log('Draw stopped successfully:', response.data);
+      console.log('Draw timer expired. drawStarted set to false.');
+      stopDrawTimer()
+    } catch (error) {
+      console.error('Error stopping draw:', error.message);
+    }
+  }, durationInSeconds * 1000); // Convert seconds to milliseconds
+}
+
+// Function to stop the draw timer
+function stopDrawTimer() {
+  clearTimeout(drawTimer); // Clear the timer interval
+  // Implement your logic to update drawStarted to false here
+  list_of_intervals.forEach(element => {
+    clearInterval(element)
+  });
+  list_of_intervals = []
+  console.log('Draw stopped: all intervals/timeouts cleared');
+}
+
+  // Function to check for changes
+async function checkForChanges(newDrawStarted) {
+  try {
+    // Fetch settings from sitesettings table
+    const settingsQuery = await pool.query('SELECT batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat, server_url FROM sitesettings LIMIT 1');
+    const { batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat, server_url } = settingsQuery.rows[0];
+
+    // Check if settings are valid
+    if (batch_amount && batch_amount > 0 && daily_number_of_winners && daily_number_of_winners > 0 &&
+        draw_timeout && draw_timeout > 0 && member_spin_timeout && member_spin_timeout > 0 && drawstartedat) {
+      
+      console.log('Settings retrieved:', { batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat });
+
+      // Update drawStarted to false if the countdown reaches zero
+      if (!newDrawStarted) {
+        stopDrawTimer()
+      } else {
+        startDrawTimer(draw_timeout, server_url)
+        // Loop batch_amount times
+        for (let i = 1; i <= batch_amount; i++) {
+          // Implement the logic to fetch random drawer and insert into Draw table here
+          console.log(`Fetching drawer for batch ${i}`);
+          for (let j = 0; j < daily_number_of_winners; j++) {
+            // fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout)
+            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
+            if (newDrawId) {
+              startTimerListener(newDrawId, member_spin_timeout);
+            }
+            
+            
+          }
+        }
+      }
+    } else {
+      console.log('Unable to retrieve valid settings');
+    }
+  } catch (error) {
+    console.error('Error occurred while updating SiteSettings and performing actions:', error.message);
+  }
+}
+// Function to fetch random drawer and insert into Draw table
+async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds, refererDraw) {
+  try {
+    // Fetch a random drawer from the members table who hasn't been selected before in this batch
+    const drawerQuery = await pool.query(
+      `SELECT * FROM members 
+      WHERE batch_number = $1 
+      AND isOnline = true 
+      AND id NOT IN (
+        SELECT drawn_by FROM Draw WHERE batch_number = $1
+        AND DATE(draw_date) = CURRENT_DATE
+      ) 
+      ORDER BY RANDOM() 
+      LIMIT 1`,
+      [batchNumber]
+    );
+
+    const drawer = drawerQuery.rows[0];
+
+    // Check if a drawer is found
+    if (drawer) {
+      var insertQuery
+      if (refererDraw) {
+        // Insert the drawer into the Draw table
+        insertQuery = await pool.query(
+          `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
+          VALUES ($1, CURRENT_TIMESTAMP, CURRENT_DATE, $2, false, $3, $4) 
+          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+          [drawer.id, countdownSeconds, batchNumber, refererDraw]
+        );
+        
+      } else {
+        // Insert the drawer into the Draw table
+        insertQuery = await pool.query(
+          `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
+          VALUES ($1, CURRENT_TIMESTAMP, CURRENT_DATE, $2, false, $3) 
+          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+          [drawer.id, countdownSeconds, batchNumber]
+        );
+        
+      }
+
+      const newDrawId = insertQuery.rows[0].id; // Retrieve the newly inserted row's ID
+
+      console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
+
+      return newDrawId; // Return the newly inserted row's ID
+    } else {
+      console.log(`No drawer found for batch ${batchNumber}`);
+      return null; // Return null if no drawer is found
+    }
+  } catch (error) {
+    console.error(`Error occurred while fetching random drawer and inserting into Draw table for batch ${batchNumber}:`, error.message);
+    return null; // Return null in case of an error
+  }
+}
+// Function to continuously monitor Draw table and decrease timer
+function startTimerListener(drawId, member_spin_timeout) {
+  // Set an interval to execute the timer logic every second
+  const intervalId = setInterval(async () => {
+    list_of_intervals.push(intervalId)
+    try {
+      // Fetch the record from Draw table by ID
+      const drawQuery = await pool.query(
+        `SELECT * FROM Draw WHERE id = $1`,
+        [drawId]
+      );
+
+      // Check if the record exists and if timer is greater than 0
+      if (drawQuery.rows.length > 0) {
+        // Decrease the timer by 1 second
+        const drawRecord = drawQuery.rows[0];
+        const { timer, used } = drawRecord;
+        const updatedTimer = timer - 1;
+
+        if (used) {
+          // If used is true, cancel the interval
+          console.log(`Draw record with ID ${drawId} has been used. Stopping timer.`);
+          clearInterval(intervalId);
+          
+        } 
+        else {
+          // Update the timer value in the database
+          await pool.query(
+            `UPDATE Draw SET timer = $1 WHERE id = $2`,
+            [updatedTimer, drawId]
+          );
   
+          console.log(`Timer decreased for draw record with ID ${drawId}: ${updatedTimer} seconds remaining`);
+  
+          // Check if the timer has reached 0
+          if (updatedTimer === 0) {
+            // Clear the interval if the timer reaches 0
+            clearInterval(intervalId);
+            // Fetch a new drawer and insert into Draw table
+            console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
+            // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+            if (newDrawId) {
+              startTimerListener(newDrawId, member_spin_timeout);
+            }
+          }
+        
+        }
+      } else {
+        // Clear the interval if the record does not exist
+        clearInterval(intervalId);
+      }
+    } catch (error) {
+      console.error('Error occurred while updating timer:', error.message);
+      // Clear the interval if error
+      clearInterval(intervalId);
+    }
+  }, 1000); // Interval of 1 second
+}
+
+
   // Call the function to drop a specific table
 //   dropTable('SiteSettings');
   
@@ -244,7 +431,7 @@ async function createTables() {
       max_days_to_penalize INTEGER,
       max_days_to_wait INTEGER,
       min_deposit_days INTEGER,
-      memeber_spin_timeout INTEGER,
+      member_spin_timeout INTEGER,
       batch_amount INTEGER,
       service_fee DECIMAL(10, 2),
       penality_fee DECIMAL(10, 2),
@@ -263,7 +450,7 @@ async function createTables() {
         INSERT INTO public.sitesettings(
           id, updated_by, deposit_contribution_after, deposit_contribution_before, daily_number_of_winners, drawstarted,
            draw_timeout, daily_win_amount, max_deposit_days, max_days_to_penalize, max_days_to_wait, 
-           min_deposit_days, memeber_spin_timeout, batch_amount, service_fee, penality_fee, maxmimum_members,
+           min_deposit_days, member_spin_timeout, batch_amount, service_fee, penality_fee, maxmimum_members,
             site_name, server_url)
           VALUES (1, 1, 550, 50, 5, false, 1, 1000000, 30, 30, 15, 15, 20, 10, 50, 80, 100000, 'Derash', 'https://localhost:3006');
         END IF; 
@@ -313,11 +500,12 @@ async function createTables() {
     await pool.query(`CREATE TABLE IF NOT EXISTS Draw (
         id SERIAL PRIMARY KEY,
         drawn_at TIMESTAMP,
-        draw_date VARCHAR(10),
+        draw_date TIMESTAMP,
         drawn_by INTEGER,
         timer INTEGER,
         used BOOLEAN,
-        pot INTEGER,
+        batch_number INTEGER,
+        referer_draw INTEGER,
         FOREIGN KEY (drawn_by) REFERENCES Members(id)
     )`);
     // Create Winners table if it doesn't exist
@@ -410,47 +598,58 @@ async function createTriggers() {
       drawStartedAt TIMESTAMP;
   BEGIN
       IF NEW.drawstarted = true THEN
-          -- Fetch settings from sitesettings table
-          SELECT batch_amount, daily_winners, draw_timeout, member_spin_timeout, draw_started_at 
-          INTO batchAmount, dailyWinners, timeoutSeconds, countdownSeconds, drawStartedAt 
-          FROM sitesettings LIMIT 1;
-  
-          -- Check if settings are valid
-          IF batchAmount IS NOT NULL AND batchAmount > 0 
-          AND dailyWinners IS NOT NULL AND dailyWinners > 0 
-          AND timeoutSeconds IS NOT NULL AND timeoutSeconds > 0
-          AND countdownSeconds IS NOT NULL AND countdownSeconds > 0 
-          AND drawStartedAt IS NOT NULL THEN
-              -- Update drawStarted to false if the countdown reaches zero
-              -- UPDATE sitesettings SET drawstarted = false WHERE CURRENT_TIMESTAMP - draw_started_at >= interval '1 second' * timeoutSeconds;
-  
-              -- Loop batchAmount times
-              FOR i IN 1..batchAmount LOOP
-                  -- Fetch a random winner from the member records who hasn't been selected before in this batch and draw_date is equal to current_timestamp in MMMdyyyy format
-                  SELECT * FROM members 
-                  WHERE batch_number = i 
-                  AND isOnline = true 
-                  AND id NOT IN (
-                    SELECT drawn_by FROM Draw WHERE batch_number = i
-                    AND TO_CHAR(CURRENT_TIMESTAMP, 'MMMdyyyy') = TO_CHAR(draw_date, 'MMMdyyyy')
-                  ) 
-                  ORDER BY RANDOM() LIMIT 1 INTO drawerRecord;
-                  
-                  -- Check if a drawer is found
-                  IF drawerRecord IS NOT NULL THEN
-                      -- Insert into Draw table with drawerRecord values and countdown
-                      INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
-                      VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, false, i);
-                  ELSE
-                      -- No more eligible winners found
-                      EXIT;
-                  END IF;
-              END LOOP;
-          END IF;
+        -- Fetch settings from sitesettings table
+        SELECT batch_amount, daily_winners, draw_timeout, member_spin_timeout, drawstartedat 
+        INTO batchAmount, dailyWinners, timeoutSeconds, countdownSeconds, drawStartedAt 
+        FROM sitesettings LIMIT 1;
+
+        -- Check if settings are valid
+        IF batchAmount IS NOT NULL AND batchAmount > 0 
+        AND dailyWinners IS NOT NULL AND dailyWinners > 0 
+        AND timeoutSeconds IS NOT NULL AND timeoutSeconds > 0
+        AND countdownSeconds IS NOT NULL AND countdownSeconds > 0 
+        AND drawStartedAt IS NOT NULL THEN
+            -- Print settings information to the console
+            RAISE NOTICE 'Settings retrieved: batchAmount=%, dailyWinners=%, timeoutSeconds=%, countdownSeconds=%, drawStartedAt=%', 
+                batchAmount, dailyWinners, timeoutSeconds, countdownSeconds, drawStartedAt;
+
+            -- Update drawStarted to false if the countdown reaches zero
+            -- UPDATE sitesettings SET drawstarted = false WHERE CURRENT_TIMESTAMP - drawstartedat >= interval '1 second' * timeoutSeconds;
+
+            -- Loop batchAmount times
+            FOR i IN 1..batchAmount LOOP
+                -- Fetch a random winner from the member records who hasn't been selected before in this batch and draw_date is equal to current_timestamp in MMMdyyyy format
+                SELECT * FROM members 
+                WHERE batch_number = i 
+                AND isOnline = true 
+                AND id NOT IN (
+                  SELECT drawn_by FROM Draw WHERE batch_number = i
+                  AND TO_CHAR(CURRENT_TIMESTAMP, 'MMMdyyyy') = TO_CHAR(draw_date, 'MMMdyyyy')
+                ) 
+                ORDER BY RANDOM() LIMIT 1 INTO drawerRecord;
+                
+                -- Check if a drawer is found
+                IF drawerRecord IS NOT NULL THEN
+                    -- Print winner information to the console
+                    RAISE NOTICE 'Winner found for batch %: %', i, drawerRecord;
+                    
+                    -- Insert into Draw table with drawerRecord values and countdown
+                    INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
+                    VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, false, i);
+                ELSE
+                    -- No more eligible winners found
+                    RAISE NOTICE 'No winner found for batch %', i;
+                    EXIT;
+                END IF;
+            END LOOP;
+        ELSE
+          RAISE NOTICE 'Unable tot retrieve values';
+
+        END IF;
       ELSIF NEW.drawstarted = false THEN
           -- Execute actions when 'drawstarted' is changed to false
           -- For example:
-          -- RAISE NOTICE 'Draw stopped';
+          RAISE NOTICE 'Draw stopped';
           -- Do something here...
       END IF;
   
@@ -467,49 +666,43 @@ async function createTriggers() {
   const countdownTriggerQuery = `
   CREATE OR REPLACE FUNCTION update_countdown_trigger_function()
   RETURNS TRIGGER AS $$
-  DECLARE
-      initialCountdownMinutes INTEGER;
-      initialCountdownSeconds INTEGER;
   BEGIN
       IF NEW.drawstarted = true THEN
-          -- Fetch initial countdown value from sitesettings table (in minutes)
-          SELECT draw_timeout INTO initialCountdownMinutes FROM sitesettings LIMIT 1;
+          -- Fetch the draw timeout in minutes from the sitesettings table
+          SELECT draw_timeout INTO NEW.countdown FROM sitesettings LIMIT 1;
           
-          IF initialCountdownMinutes IS NOT NULL THEN
-              -- Convert initial countdown value from minutes to seconds
-              initialCountdownSeconds := initialCountdownMinutes * 60;
+          -- Convert the countdown value from minutes to seconds
+          NEW.countdown := NEW.countdown * 60;
+          
+          -- Loop to update the countdown every second until it reaches 0
+          WHILE NEW.countdown > 0 LOOP
+              -- Pause for 1 second
+              PERFORM pg_sleep(1);
               
-              -- Update countdown value in sitesettings table with the initial value
-              UPDATE sitesettings SET countdown = initialCountdownSeconds;
+              -- Decrement the countdown value by 1 second
+              NEW.countdown := NEW.countdown - 1;
               
-              -- Update countdown every second until it reaches 0
-              LOOP
-                  -- Update countdown value
-                  UPDATE sitesettings SET countdown = countdown - 1;
-                  
-                  -- Check if countdown reached 0
-                  IF NEW.countdown = 0 THEN
-                      -- Set drawStarted to false
-                      UPDATE sitesettings SET drawstarted = false;
-                      EXIT; -- Exit the loop
-                  END IF;
-                  
-                  -- Pause for 1 second
-                  PERFORM pg_sleep(1);
-              END LOOP;
-          END IF;
+              -- If countdown reaches 0, set drawStarted to false
+              IF NEW.countdown <= 0 THEN
+                  NEW.countdown := 0;
+                  NEW.drawstarted := false;
+                  EXIT;
+              END IF;
+          END LOOP;
+      ELSE
+          -- Reset countdown if draw is not started
+          NEW.countdown := NULL;
       END IF;
-      
+
       RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
 
   CREATE OR REPLACE TRIGGER update_countdown_trigger
-  AFTER UPDATE ON sitesettings
+  BEFORE UPDATE ON sitesettings
   FOR EACH ROW
-  WHEN (OLD.drawstarted IS DISTINCT FROM NEW.drawstarted OR OLD.countdown IS DISTINCT FROM NEW.countdown)
+  WHEN (OLD.drawstarted IS DISTINCT FROM NEW.drawstarted)
   EXECUTE FUNCTION update_countdown_trigger_function();
-
   `
   const drawerSelectedTriggerQuery = `
   CREATE OR REPLACE FUNCTION start_countdown_trigger_function()
@@ -597,12 +790,12 @@ async function createTriggers() {
       RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
-
+  
   CREATE OR REPLACE TRIGGER enforce_draw_started
-  BEFORE INSERT ON Draw
+  BEFORE INSERT OR UPDATE ON Draw
   FOR EACH ROW
   EXECUTE FUNCTION check_draw_started();
-`
+  `  
 
   try {
     await pool.query(checkDrawStartedTriggerQuery)
@@ -612,27 +805,27 @@ async function createTriggers() {
     .catch((error) => {
         console.error("Error creating check draw started trigger:", error);
     });
-    await pool.query(drawTriggerQuery)
-    .then(() => {
-        console.log("DrawStart trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger draw started:", error);
-    });
-    await pool.query(countdownTriggerQuery)
-    .then(() => {
-        console.log("Countdown trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger countdown:", error);
-    });
-    await pool.query(drawerSelectedTriggerQuery)
-    .then(() => {
-        console.log("Drawer Selected trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger drawer selected:", error);
-    });
+    // await pool.query(drawTriggerQuery)
+    // .then(() => {
+    //     console.log("DrawStart trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger draw started:", error);
+    // });
+    // await pool.query(countdownTriggerQuery)
+    // .then(() => {
+    //     console.log("Countdown trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger countdown:", error);
+    // });
+    // await pool.query(drawerSelectedTriggerQuery)
+    // .then(() => {
+    //     console.log("Drawer Selected trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger drawer selected:", error);
+    // });
     
   } catch (error) {
     console.log(error);
@@ -672,49 +865,6 @@ app.post('/uploadImage', upload.single('file'), async (req, res) => {
   }
 });
 
-// Endpoint to login a member
-app.post('/loginMember', async (req, res) => {
-  try {
-    // console.log(req);
-    const { phone, password, confirm } = req.body;
-    if (!phone || !password || confirm != null) {
-      return res.status(400).json({ success: false, message: 'Request body is missing.' });
-    }
-    if (confirm === true) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      // Update member and add password
-      await pool.query('UPDATE Members SET password = $1 WHERE phone = $2', [hashedPassword, `+251${phone}`]);
-      const result = await pool.query('SELECT * FROM Members WHERE phone = $1', [`+251${phone}`]);
-      res.status(200).json({ message: 'Login successful', data: result.rows[0] });
-    } else {
-      // Check if the user is registered
-      const result = await pool.query('SELECT * FROM Members WHERE phone = $1', [`+251${phone}`]);
-      if (result.rows.length === 1) {
-        // User is registered
-        if (result.rows[0].password) {
-          // User is registered
-          const storedPassword = result.rows[0].password;
-          // Compare the hashed password with the stored hash
-          const passwordMatch = await bcrypt.compare(password, storedPassword);
-          if (passwordMatch) {
-              res.status(200).json({ message: 'Login successful', data: result.rows[0] });
-          } else {
-              res.status(401).json({ message: 'Invalid phone or password' });
-          }
-        } else {
-          // Email value does not exist in the database, send confirm = true
-          res.status(200).json({ confirm: true, message: 'Confirm your registration' });
-        }
-      } else {
-        // User is not registered
-        res.status(401).json({ message: 'User is not registered' });
-      }
-    }
-  } catch (error) {
-    console.error('Error during login', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
 
 app.post('/loginStaff', async (req, res) => {
     try {
@@ -749,6 +899,47 @@ app.post('/loginStaff', async (req, res) => {
                 }
             } else {
                 res.status(401).json({ message: `User is not registered +251${phone}` });
+            }
+        }
+    } catch (error) {
+        console.error('Error during login', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+app.post('/loginMember', async (req, res) => {
+    try {
+        const { phone, password, confirm } = req.body;
+        if (!phone || !password || confirm == null) {
+            return res.status(400).json({ success: false, message: 'Request body is missing.' });
+        }
+
+        if (confirm === true) {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            await pool.query('UPDATE members SET password = $1 WHERE phone = $2', [hashedPassword, `+251${phone}`]);
+            const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
+            // Generate JWT token
+            const token = jwt.sign({ phone: result.rows[0].phone, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+            res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+        } else {
+            const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
+            if (result.rows.length === 1) {
+                const storedPassword = result.rows[0].password;
+                if (storedPassword != null) {
+                  const passwordMatch = await bcrypt.compare(password, storedPassword);
+                  if (passwordMatch) {
+                      // Generate JWT token
+                      const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+                      res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+                  } else {
+                      res.status(401).json({ message: 'Invalid phone or password' });
+                  }                  
+                } else {
+                  res.status(200).json({message: 'Confirm your password please!', confirm: true})
+                  
+                }
+            } else {
+                res.status(401).json({ message: `Member is not registered +251${phone}` });
             }
         }
     } catch (error) {
@@ -895,23 +1086,29 @@ app.post('/start-draw', async (req, res) => {
 
 
   
-  // Endpoint to start draw
-  app.post('/startDraw', async (req, res) => {
-    try {
-      const { drawstarted } = req.body;
-      console.log(drawstarted);
-      const setting = await pool.query('SELECT * FROM sitesettings');
-      // console.log(setting.rows[0]);
-      await pool.query('UPDATE SiteSettings SET drawstarted = $1 WHERE id = $2', [drawstarted, setting.rows[0].id]).then(async()=>{
-        const setting = await pool.query('SELECT * FROM sitesettings');
-        res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: setting.rows[0]});
-      });
-    } catch (error) {
-      console.error('Error starting draw', error);
-      res.status(500).json({ message: 'Internal Server Error' });
-    }
-  });
-  
+// Endpoint to start draw
+app.post('/startDraw', async (req, res) => {
+  try {
+    const { drawstarted } = req.body;
+    console.log(drawstarted);
+    const setting = await pool.query('SELECT * FROM sitesettings');
+    // console.log(setting.rows[0]);
+    await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
+      // After updating the drawstarted value, check for changes
+      await checkForChanges(drawstarted);
+
+      // Retrieve the updated setting after the change
+      const updatedSetting = await pool.query('SELECT * FROM sitesettings');
+      
+      // Respond with the updated setting
+      res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: updatedSetting.rows[0]});
+    });
+  } catch (error) {
+    console.error('Error starting draw', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
   // Endpoint to fetch winners
   app.get('/fetchWinners', async (req, res) => {
     try {
