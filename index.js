@@ -1005,14 +1005,111 @@ app.get('/fetchWinners', async (req, res) => {
 app.get('/fetchMembers', async (req, res) => {
   try {
     // const members = await pool.query('SELECT * FROM Members order by id limit 10');
-    const members = await pool.query('SELECT * FROM Members order by id desc limit 1');
+    const members = await pool.query('SELECT * FROM Members order by id desc');
     console.log("Members Count:", members.rowCount);
     res.status(200).json({ members: members.rows });
   } catch (error) {
     console.error('Error fetching members', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
-});  
+});
+// Endpoint to fetch members
+app.get('/fetchMembers/:batch_number', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    // const members = await pool.query('SELECT * FROM Members order by id limit 10');
+    const members = await pool.query('SELECT * FROM Members where batch_number = $1 order by id desc',[batchNumber]);
+    console.log("Members Count:", members.rowCount);
+    res.status(200).json({ members: members.rows });
+  } catch (error) {
+    console.error('Error fetching members', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchMembersCount', async (req, res) => {
+  try {
+    const countQuery = await pool.query('SELECT COUNT(*) FROM Members');
+    const count = countQuery.rows[0].count;
+    
+    console.log("Members Count:", count);
+    res.status(200).json({ count: count });
+  } catch (error) {
+    console.error('Error fetching members count', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchMembersCount/:batch_number', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    const countQuery = await pool.query('SELECT COUNT(*) FROM Members WHERE batch_number = $1', [batchNumber]);
+    const count = countQuery.rows[0].count;
+    
+    console.log("Members Count:", count);
+    res.status(200).json({ count: count });
+  } catch (error) {
+    console.error('Error fetching members count', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchMembersCount/:batch_number/:winner', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    const winner = req.params.winner;
+    const countQuery = await pool.query('SELECT COUNT(*) FROM Members WHERE batch_number = $1 AND won =$2', [batchNumber, winner]);
+    const count = countQuery.rows[0].count;
+    
+    console.log("Members Count:", count);
+    res.status(200).json({ count: count });
+  } catch (error) {
+    console.error('Error fetching members count', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchDepositSum/:batch_number', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    
+    const sumQuery = await pool.query('SELECT SUM(amount) AS totalAmount FROM Deposit WHERE batch_number = $1', [batchNumber]);
+    const totalAmount = sumQuery.rows[0].totalamount;
+    console.log(`Total Deposit Amount for batch ${batchNumber}:`, totalAmount);
+    res.status(200).json({ totalAmount: totalAmount });
+  } catch (error) {
+    console.error('Error fetching total deposit amount', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchDepositSum/:batch_number/:id', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    const id = req.params.id;
+    
+    const sumQuery = await pool.query('SELECT SUM(daily_contributed_amount) AS totalAmount FROM lottonumbers WHERE batch_number = $1 AND id = $2', [batchNumber, id]);
+    const totalAmount = sumQuery.rows[0].totalamount;
+    
+    console.log(`Total Deposit Amount for batch ${batchNumber} and member ${id}:`, totalAmount);
+    res.status(200).json({ totalAmount: totalAmount });
+  } catch (error) {
+    console.error('Error fetching total deposit amount', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+app.get('/fetchDepositSum/:batch_number/:expired/:id', async (req, res) => {
+  try {
+    const batchNumber = req.params.batch_number;
+    const expired = req.params.expired;
+    const id = req.params.id;
+    
+    const sumQuery = await pool.query('SELECT SUM(daily_contributed_amount) AS totalAmount FROM lottonumbers WHERE batch_number = $1 AND expired = $2 AND member = $3', [batchNumber, expired, id]);
+    const totalAmount = sumQuery.rows[0].totalamount;
+    
+    console.log(`Total ${expired ? 'Expired' : 'Not Expired'} Deposit Amount for batch ${batchNumber}:`, totalAmount);
+    res.status(200).json({ totalAmount: totalAmount });
+  } catch (error) {
+    console.error('Error fetching total deposit amount', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+ 
 app.get('/searchMembers/:column/:keyword', async (req, res) => {
   try {
     const column = req.params.column.toLowerCase();
