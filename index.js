@@ -970,11 +970,17 @@ app.put('/editMember/:id', async (req, res) => {
 
 app.post('/startDraw', async (req, res) => {
   try {
+    var incrementedDate = 'NOW()'
     const { drawstarted } = req.body;
     console.log(drawstarted);
     const setting = await pool.query('SELECT * FROM sitesettings');
-    // console.log(setting.rows[0]);
-    await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
+    const dateAvailable = setting.rows[0].drawstartedat
+    if (dateAvailable != null) {
+      const lastDate = new Date(setting.rows[0].drawstartedat);
+      incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));
+    }
+    // await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
+    await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, incrementedDate]).then(async()=>{
       // After updating the drawstarted value, check for changes
       await checkForChanges(drawstarted);
 
@@ -1202,18 +1208,18 @@ app.get('/fetchDeposit/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-// Endpoint to fetch lottNumbers
+// Endpoint to fetch lottoNumbers
 app.get('/fetchLottoNumbers/:id', async (req, res) => {
   const memberId = req.params.id;
   try {
-    const lottNumbers = await pool.query('SELECT * FROM lottonumbers WHERE member = $1 order by id desc', [memberId]);
-    res.status(200).json({ lottNumbers: lottNumbers.rows });
+    const lottoNumbers = await pool.query('SELECT * FROM lottonumbers WHERE member = $1 order by id desc', [memberId]);
+    res.status(200).json({ lottoNumbers: lottoNumbers.rows });
   } catch (error) {
-    console.error('Error fetching lottNumbers', error);
+    console.error('Error fetching lottoNumbers', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-// Endpoint to fetch lottNumbers
+// Endpoint to fetch lottoNumbers
 app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
   try {
     const memberId = req.params.id;
@@ -1224,7 +1230,7 @@ app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
     console.log(lottNumber.rows);
     res.status(200).json({ lottNumber: lottNumber.rows[0] });
   } catch (error) {
-    console.error('Error fetching lottNumbers', error);
+    console.error('Error fetching lottoNumbers', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -1924,34 +1930,45 @@ async function processDeposit(amount, user, penality, memberID){
     // }
     // Insert into LottoNumbers table for each lotto number
     for (let j = 0; j < numberOfLottoNumbers; j++) {
-        var currentLottoNumberPadded = await pool.query('SELECT * FROM lottosetting where batch_number = $1 order by id desc limit 1', [batchNumber]);
-        if (currentLottoNumberPadded.rowCount == 1) {
-          lottoSettingExists = true;
-          countStart = parseInt(currentLottoNumberPadded.rows[0].current_lotto_number) + 1
-        }
-        else{
-          lottoSettingExists = false;
-        }
-        var currentLottoNumber = (countStart).toString().padStart(10, '0');
+      const getLastDateQuery = `
+        SELECT COALESCE(
+          (SELECT lastdate FROM members WHERE id = $1),
+          NOW()
+        ) AS last_date`;
+      const lastDateResult = await pool.query(getLastDateQuery, [memberID]);
+      const lastDate = new Date(lastDateResult.rows[0].last_date);
 
-        formattedDate = formatDateNow(daysDifference != 0 ? j + daysDifference + 1 : j + daysDifference);
-        
-        if (!lottoSettingExists) {
-          await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, batchNumber])            
-        } else {
-          await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
-        }
-            
-        await pool.query('UPDATE Members SET lastDate = NOW() WHERE id = $1', [memberId]);
-        
-        if (!winner) {
-          bulkLottoNumberData.push([batchNumber, 'NOW()', currentLottoNumber, dailyContribution, depositId, false, false, memberId]);
-        }
-        else{
-          bulkServiceFeeData.push([formattedDate, memberId, depositId, settings.service_fee]);
-        
-        }
-        // bulkDailyContributionData.push([formattedDate, memberId, depositId, dailyContribution, false]);
+      // Step 2: Increment the retrieved date by 1 day
+      const incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));
+  
+      var currentLottoNumberPadded = await pool.query('SELECT * FROM lottosetting where batch_number = $1 order by id desc limit 1', [batchNumber]);
+      if (currentLottoNumberPadded.rowCount == 1) {
+        lottoSettingExists = true;
+        countStart = parseInt(currentLottoNumberPadded.rows[0].current_lotto_number) + 1
+      }
+      else{
+        lottoSettingExists = false;
+      }
+      var currentLottoNumber = (countStart).toString().padStart(10, '0');
+
+      formattedDate = formatDateNow(daysDifference != 0 ? j + daysDifference + 1 : j + daysDifference);
+      
+      if (!lottoSettingExists) {
+        await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, batchNumber])            
+      } else {
+        await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
+      }
+          
+      await pool.query('UPDATE Members SET lastDate = $2 WHERE id = $1', [memberId, incrementedDate]);
+      
+      if (!winner) {
+        bulkLottoNumberData.push([batchNumber, incrementedDate, currentLottoNumber, dailyContribution, depositId, false, false, memberId]);
+      }
+      else{
+        bulkServiceFeeData.push([incrementedDate, memberId, depositId, settings.service_fee]);
+      
+      }
+      // bulkDailyContributionData.push([formattedDate, memberId, depositId, dailyContribution, false]);
         
     }
       // Check if bulk lists are not empty
