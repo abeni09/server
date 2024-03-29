@@ -12,6 +12,7 @@ const { setTimeout } = require('timers');
 const axios = require('axios'); // Import Axios for making HTTP requests
 // const { createProxyMiddleware } = require('http-proxy-middleware');
 
+const verifyToken = require('./middleware');
 const app = express();
 
 // // Define a reverse proxy middleware for your insecure HTTP service
@@ -27,6 +28,7 @@ const port = 3006;
 
 // Enable CORS for all routes
 app.use(cors());
+app.use(verifyToken);
 
 // Parse URL-encoded bodies
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -90,8 +92,9 @@ const upload = multer({ storage: storage });
 // Serve static files from multiple directories
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const SECRET_KEY = 'DerashUserJWT';
 
+require('dotenv').config();
+const SECRET_KEY = process.env.SECRET_KEY;
 
 let DRAW_STARTED_AT = null;
 let Simulated_Days = null;
@@ -1283,7 +1286,7 @@ app.get('/fetchSiteSettings', async (req, res) => {
           res.status(200).json({ message: `Settings data exists`, settings: settings });
           
       } else {
-          res.status(200).json({ message: `Settings data does not exist`, settings: null });
+          res.status(400).json({ message: `Settings data does not exist`, settings: null });
           
       }
   } catch (error) {
@@ -1302,7 +1305,7 @@ app.get('/fetchWinners/:batch/:date', async (req, res) => {
           res.status(200).json({ message: `Winners fetched`, winners: winners });
           
       } else {
-          res.status(200).json({ message: `Winners data does not exist`, winners: null });
+          res.status(400).json({ message: `Winners data does not exist`, winners: null });
           
       }
   } catch (error) {
