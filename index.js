@@ -446,7 +446,7 @@ async function createTables() {
     pool.query(`
       DO $$ 
       BEGIN 
-        IF NOT EXISTS (SELECT 1 FROM public.lottoSetting WHERE id = 1) THEN 
+        IF NOT EXISTS (SELECT 1 FROM public.sitesettings WHERE id = 1) THEN 
         INSERT INTO public.sitesettings(
           id, updated_by, deposit_contribution_after, deposit_contribution_before, daily_number_of_winners, drawstarted,
            draw_timeout, daily_win_amount, max_deposit_days, max_days_to_penalize, max_days_to_wait, 
@@ -457,10 +457,10 @@ async function createTables() {
       END $$;
     `, (error, results) => {
       if (error) {
-        console.error('Error creating lotto setting:', error);
+        console.error('Error creating site setting:', error);
         // Handle error
       } else {
-        console.log('lotto setting created successfully');
+        console.log('site setting created successfully');
         // Handle success
       }
     });
@@ -1071,6 +1071,7 @@ app.get('/fetchDepositSum/:batch_number', async (req, res) => {
     
     const sumQuery = await pool.query('SELECT SUM(amount) AS totalAmount FROM Deposit WHERE batch_number = $1', [batchNumber]);
     const totalAmount = sumQuery.rows[0].totalamount;
+    console.log(sumQuery.rows[0]);
     console.log(`Total Deposit Amount for batch ${batchNumber}:`, totalAmount);
     res.status(200).json({ totalAmount: totalAmount });
   } catch (error) {
@@ -1212,6 +1213,21 @@ app.get('/fetchLottoNumbers/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+// Endpoint to fetch lottNumbers
+app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
+  try {
+    const memberId = req.params.id;
+    const date = req.params.date;
+    console.log(memberId);
+    console.log(date);
+    const lottNumber = await pool.query('SELECT * FROM lottonumbers WHERE member = $1 AND DATE(deposited_at) = $2 order by id desc limit 1', [memberId, date]);
+    console.log(lottNumber.rows);
+    res.status(200).json({ lottNumber: lottNumber.rows[0] });
+  } catch (error) {
+    console.error('Error fetching lottNumbers', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 app.post('/stopSpinner', async (req, res) => {
   try {
@@ -1266,6 +1282,25 @@ app.get('/fetchSiteSettings', async (req, res) => {
       }
   } catch (error) {
       console.error(`Error fetching site settings`, error);
+      res.status(500).json({ message: 'Internal Server Error' });
+  }
+});  
+// Endpoint to fetch winners from a table
+app.get('/fetchWinners/:batch/:date', async (req, res) => {
+  const batch_number = req.params.batch;
+  const date = req.params.date;
+  try {
+      const winnersQuery = await pool.query('SELECT * FROM winners WHERE DATE(won_at) = $1 AND batch_number = $2',[date, batch_number]);
+      if (winnersQuery.rowCount > 0) {
+          const winners = winnersQuery.rows;
+          res.status(200).json({ message: `Winners fetched`, winners: winners });
+          
+      } else {
+          res.status(200).json({ message: `Winners data does not exist`, winners: null });
+          
+      }
+  } catch (error) {
+      console.error(`Error fetching site winners`, error);
       res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -1733,23 +1768,23 @@ app.post('/saveUser', async (req, res) => {
     return res.status(500).json({ message: `Internal server error, ${error.message}` });
   }
 });
-app.post('/processBulkDeposit', async (req, res) => {
-  var countStart;
-  // var Start = 23250;
-  try {
-    countStart = parseInt((await pool.query('SELECT * FROM public.lottonumbers order by lotto_number desc limit 1')).rows[0].lotto_number) + 1    
-  } catch (error) {
-    countStart = 0    
-  }
-  const Start = countStart/90
-  console.log('Start:', Start);
-  console.log('countStart:', countStart);
-  // try {
-  processDeposit(countStart, Start).then(()=>{
+// app.post('/processBulkDeposit', async (req, res) => {
+//   var countStart;
+//   // var Start = 23250;
+//   try {
+//     countStart = parseInt((await pool.query('SELECT * FROM public.lottonumbers order by lotto_number desc limit 1')).rows[0].lotto_number) + 1    
+//   } catch (error) {
+//     countStart = 0    
+//   }
+//   const Start = countStart/90
+//   console.log('Start:', Start);
+//   console.log('countStart:', countStart);
+//   // try {
+//   processDeposit(countStart, Start).then(()=>{
   
-    res.status(200).json({ message: 'Deposits processed successfully' });
+//     res.status(200).json({ message: 'Deposits processed successfully' });
 
-  });
+//   });
   // } catch (error) {
   //     console.error('Error processing deposits and fetching members', error);
   //     Start = (await pool.query('SELECT * FROM public.lottonumbers order by id desc')).rowCount
@@ -1757,13 +1792,30 @@ app.post('/processBulkDeposit', async (req, res) => {
   //     processDeposit(countStart, Start)
   //     // res.status(500).json({ message: 'Internal Server Error' });
   // }
-});
+// });
 app.post('/processDeposit', async (req, res) => {
   // var countStart = 0;
   // var Start = 23250;
   try {
     const { amount, user, penality, member } = req.body;
     processDeposit(amount,user, penality, member).then((success)=>{
+      if (success) {
+        res.status(200).json({ message: 'Deposits processed successfully' });
+      }
+      else{      
+        res.status(500).json({ message: 'Faild to process deposit' });
+      }
+  
+    });
+  } 
+  catch (error) {
+    console.error('Error processing deposits and fetching members', error);
+  }
+});
+app.post('/processBulkDeposit', async (req, res) => {
+  try {
+    const { initID } = req.body;
+    processBulkDeposit(initID).then((success)=>{
       if (success) {
         res.status(200).json({ message: 'Deposits processed successfully' });
       }
@@ -1842,9 +1894,9 @@ async function processDeposit(amount, user, penality, memberID){
     
     // Insert deposit into Deposit table
     const newDepositQuery = await pool.query(
-        `INSERT INTO Deposit (deposited_at, deposited_by, deposited_for, amount) 
-        VALUES (NOW(), $1, $2, $3) RETURNING id`,
-        [user, memberId, amount]
+        `INSERT INTO Deposit (deposited_at, deposited_by, deposited_for, amount, batch_number) 
+        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        ['NOW()', user, memberId, amount, batchNumber]
     );
     const depositId = newDepositQuery.rows[0].id; // Retrieve the inserted ID
 
@@ -1880,7 +1932,7 @@ async function processDeposit(amount, user, penality, memberID){
         else{
           lottoSettingExists = false;
         }
-        var currentLottoNumber = (countStart).toString().padStart(9, '0');
+        var currentLottoNumber = (countStart).toString().padStart(10, '0');
 
         formattedDate = formatDateNow(daysDifference != 0 ? j + daysDifference + 1 : j + daysDifference);
         
@@ -1890,7 +1942,7 @@ async function processDeposit(amount, user, penality, memberID){
           await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
         }
             
-        await pool.query('UPDATE Members SET lastDate = $1 WHERE id = $2', [formattedDate, memberId]);
+        await pool.query('UPDATE Members SET lastDate = NOW() WHERE id = $1', [memberId]);
         
         if (!winner) {
           bulkLottoNumberData.push([batchNumber, 'NOW()', currentLottoNumber, dailyContribution, depositId, false, false, memberId]);
@@ -1899,7 +1951,7 @@ async function processDeposit(amount, user, penality, memberID){
           bulkServiceFeeData.push([formattedDate, memberId, depositId, settings.service_fee]);
         
         }
-        bulkDailyContributionData.push([formattedDate, memberId, depositId, dailyContribution, false]);
+        // bulkDailyContributionData.push([formattedDate, memberId, depositId, dailyContribution, false]);
         
     }
       // Check if bulk lists are not empty
@@ -1943,7 +1995,7 @@ async function processDeposit(amount, user, penality, memberID){
       
       const endAt = Date.now();
       const diff = endAt - startAt
-      console.log('minutes took: ',diff/60000);
+      console.log(`seconds took for member ${memberID}: `,diff/1000);
       bulkDailyContributionData = []
       bulkLottoNumberData = []
       bulkMembersData = []
@@ -1958,225 +2010,34 @@ async function processDeposit(amount, user, penality, memberID){
   }
 
 }
-async function processBulkDeposit(initCountStart, initStart){
-  try {  
-    const amount = 4500;
-    const user = 1;
-    const penality = 0;
-    var Start = initStart
-    var countStart = initCountStart
-    const siteSettingQuery = await pool.query('SELECT * FROM SiteSettings');
-    const settings = siteSettingQuery.rows[0];
-    // console.log(settings);
-  //  await pool.query('DELETE FROM lottosetting');
-  //  await pool.query('DELETE FROM lottonumbers');
-  //  await pool.query('DELETE FROM dailycontribution');
-  //  await pool.query('DELETE FROM deposit');
-    
-    const membersQuery = await pool.query('SELECT * FROM Members ORDER BY id ASC');
-    const members = membersQuery.rows;
+async function processBulkDeposit(initID){
+  try {
+    const countQuery = await pool.query('SELECT COUNT(*) FROM Members');
+    const count = countQuery.rows[0].count;
+    var membersCount = count + initID
+    console.log(count);
+    console.log(membersCount);
     const startAt = Date.now();
-  
-    // Prepare data for bulk insertion
-    var bulkLottoNumberData = [];
-    var bulkDailyContributionData = [];
-    var bulkServiceFeeData = [];
-    var bulkMembersData = [];
-    var bulkDepositData = [];
-    var bulkLottoSettingData = [];
-    const oneTimeMembers = 50
-    // const idInterval = 100
-    // var startId = 683; // Define the start of the ID range
-    // var endId = startId + idInterval; // Define the end of the ID range
-    const interval = (members.length - Start)/oneTimeMembers
-    var numberOfLottoNumbers
-    console.log(interval);
-    for (let index = 0; index < interval; index++) {
-  
-      // const membersQuery = await pool.query('SELECT * FROM Members WHERE id BETWEEN $1 AND $2 ORDER BY id ASC', [startId, endId]);
-  
-      console.log(index);
-      for (let i = Start; i < Start + oneTimeMembers; i++) {
-          // console.log(Start);
-          const member = members[i];
-          const memberId = parseInt(member.id);
-          const batchNumber = parseInt(member.batch_number);
-          const winner = member.won;
-          var daysDifference = 0;
-          var formattedDate;
-          var lottoSettingExists = false;
-          
-          if (member.lastDate != null) {
-              daysDifference = daysAheadOfToday(member.lastDate);
-          }
-          console.log(member.name);
-          
-          // Insert deposit into Deposit table
-          // const newDepositQuery = await pool.query(
-          //     `INSERT INTO Deposit (deposited_at, deposited_by, deposited_for, amount) 
-          //     VALUES (NOW(), $1, $2, $3) RETURNING id`,
-          //     [user, memberId, amount]
-          // );
-          bulkDepositData.push(['NOW()', user, memberId, amount, batchNumber])
-          // const depositId = newDepositQuery.rows[0].id; // Retrieve the inserted ID
-  
-          var dailyContribution = parseInt(settings.deposit_contribution_before);
-          if (winner) {
-              dailyContribution = parseInt(settings.deposit_contribution_after);
-          }
-  
-          // if (winner && penality != 0) {
-          //     await pool.query(
-          //         `INSERT INTO PenalityFee (date, days, member, deposit, amount) 
-          //         VALUES ($1, $2, $3, $4, $5)`,
-          //         [formatDateNow(0), penality/parseInt(settings.penality_fee), memberId, depositId, penality]
-          //     ).then(()=>{
-          //         console.log(`Penalized ${penality} member with ID: ${memberId}`);
-          //     })
-          // }
-          // Calculate number of lotto numbers based on total amount and daily contribution
-          numberOfLottoNumbers = Math.floor(amount / dailyContribution);
-          const LottoSettingsQuery = await pool.query('SELECT * FROM LottoSetting WHERE batch_number = $1', [batchNumber]);
-              
-          var LottoSetting = LottoSettingsQuery.rows[0];
-          if (LottoSettingsQuery.rowCount > 0) {
-            lottoSettingExists = true;
-          }
-          if (countStart == 0) {
-            console.log("countstart", countStart);
-            // bulkMembersData.push(['Jun182024', memberId]);              
-          }
-          // var currentLottoNumber = '000000000'; // Default value
-          // Insert into LottoNumbers table for each lotto number
-          for (let j = 0; j < numberOfLottoNumbers; j++) {
-              
-              // if (lottoSettingExists) {
-              var currentLottoNumber = (countStart + j).toString().padStart(9, '0');
-              // console.log(countStart);
-              // console.log(currentLottoNumber);
-              // }
-              
-              if (!winner) {
-                
-                // await pool.query(
-                //   `INSERT INTO LottoNumbers (batch_number, deposited_at, lotto_number, daily_contributed_amount, deposit, winner, expired, member) 
-                //   VALUES  (NOW(), $1, $2, $3) RETURNING id`,
-                //   // [user, memberId, amount]
-                //   [batchNumber, 'NOW()', currentLottoNumber, dailyContribution, depositId, false, false, memberId]
-                // );
-                bulkLottoNumberData.push([batchNumber, 'NOW()', currentLottoNumber, dailyContribution, false, false, memberId]);
-              }
-              else{
-                bulkServiceFeeData.push([formattedDate, memberId, settings.service_fee]);
-              
-              }
-  
-              formattedDate = formatDateNow(daysDifference != 0 ? j + daysDifference + 1 : j + daysDifference);
-              bulkDailyContributionData.push([formattedDate, memberId, dailyContribution, false]);
-              // if (!lottoSettingExists) {
-              //   const LottoSettingsQuery = await pool.query('SELECT * FROM LottoSetting WHERE batch_number = $1', [batchNumber]);
-                    
-              //   LottoSetting = LottoSettingsQuery.rows[0];
-              //   lottoSettingExists = true;
-                
-              // }
-              // console.log(currentLottoNumber);
-          }
-          // bulkLottoSettingData.push([formattedDate, memberId, depositId, dailyContribution, false]);
-          // if (countStart == 0) {
-          //   await pool.query(`INSERT INTO LottoSetting (current_lotto_number, batch_number, updated_at) VALUES ($1, $2, NOW())`, [currentLottoNumber, batchNumber])            
-          // } else {
-          //   await pool.query(`UPDATE LottoSetting set current_lotto_number = $1, updated_at = NOW() WHERE batch_number = $2`, [currentLottoNumber, batchNumber])
-          // }
-              
-          // await pool.query('UPDATE Members SET lastDate = $1 WHERE id = $2', ['Jun172024', memberId]);
-          countStart = countStart + numberOfLottoNumbers
-      }
-      // Check if bulk lists are not empty
-      const promises = [];
-      // For ServiceFee table
-      // if (bulkServiceFeeData.length > 0) {
-      //   const serviceFeeQuery = `
-      //       INSERT INTO ServiceFee (date, member, deposit, amount) 
-      //       VALUES 
-      //       ${bulkServiceFeeData.map((_, index) => `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`).join(', ')}
-      //   `;
-      //   const serviceFeeValues = bulkServiceFeeData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
-      //   promises.push(pool.query(serviceFeeQuery, serviceFeeValues));
-      // }
-
-      // For LottoNumbers table
-      if (bulkLottoNumberData.length > 0) {
-        const lottoNumbersQuery = `
-            INSERT INTO LottoNumbers (batch_number, deposited_at, lotto_number, daily_contributed_amount, winner, expired, member) 
-            VALUES 
-            ${bulkLottoNumberData.map((_, index) => `($${index * 7 + 1}, $${index * 7 + 2}, $${index * 7 + 3}, $${index * 7 + 4}, $${index * 7 + 5}, $${index * 7 + 6}, $${index * 7 + 7})`).join(', ')}
-        `;
-        const lottoNumbersValues = bulkLottoNumberData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
-        promises.push(pool.query(lottoNumbersQuery, lottoNumbersValues));
-      }
-  
-        // Construct bulk insert query for Deposits
-      if (bulkDepositData.length > 0) {
-        const insertDepositQuery = `
-            INSERT INTO Deposit (deposited_at, deposited_by, deposited_for, amount, batch_number) 
-            VALUES 
-            ${bulkDepositData.map((_, index) => `($${index * 5 + 1}, $${index * 5 + 2}, $${index * 5 + 3}, $${index * 5 + 4}, $${index * 5 + 5})`).join(', ')}
-            RETURNING id
-        `;
-        const insertDepositValues = bulkDepositData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
-        promises.push(pool.query(insertDepositQuery, insertDepositValues));
-      }
-  
-  
-      // Construct bulk update query for Members
-      // if (bulkMembersData.length > 0) {
-      //   const updateMembersQuery = `
-      //       UPDATE Members 
-      //       SET lastdate = CASE id ${bulkMembersData.map((data, index) => `WHEN $${index * 2 + 1} THEN $${index * 2 + 2}`).join(' ')} END
-      //   `;
-      //   const updateMembersValues = bulkMembersData.reduce((acc, data) => [...acc, data[0], data[1]], []); // Flatten the array
-      //   promises.push(pool.query(updateMembersQuery, updateMembersValues));
-      // }
-  
-  
-      if (bulkDailyContributionData.length > 0) {
-        const query = `
-            INSERT INTO DailyContribution (date, member, amount, expired)
-            VALUES 
-            ${bulkDailyContributionData.map((_, index) => `($${index * 4 + 1}, $${index * 4 + 2}, $${index * 4 + 3}, $${index * 4 + 4})`).join(', ')}
-        `;
-        const values = bulkDailyContributionData.reduce((acc, data) => [...acc, ...data], []); // Flatten the array
-        promises.push(pool.query(query, values));
-      }
-    
-      // Execute queries if there are any
-      if (promises.length > 0) {
-          // console.log(bulkDailyContributionData.length);
-          // console.log(bulkLottoNumberData.length);
-          await Promise.all(promises);
-      }
-      
-      const endAt = Date.now();
-      const diff = endAt - startAt
-      console.log('minutes took: ',diff/60000);
-      
-      
-      // countStart = countStart + oneTimeMembers
-      Start = Start + oneTimeMembers
-      // countStart = countStart + (oneTimeMembers * numberOfLottoNumbers)
-      bulkDailyContributionData = []
-      bulkLottoNumberData = []
-      bulkMembersData = []
-      bulkDepositData = []
+    // const oneTimeMembers = 50
+    // const interval = (count - Start)/oneTimeMembers
+    // console.log(interval);
+    // for (let index = 0; index < interval; index++) {
+    //   console.log(index);
+    //   for (let i = Start; i < Start + oneTimeMembers; i++) {
+    for (let i = initID; i < membersCount; i++) {
+      console.log(membersCount);
+      console.log(`Processing deposit for member with id: ${i}`);
+      await processDeposit(4500,1,0,i)
     }
-  
-  
-    
+    const endAt = Date.now();
+    const diff = endAt - startAt
+    console.log('all process deposit minutes took: ',diff/60000);
+    return true
+    //   }
+    // }
   } catch (error) {
-    console.log(error);
-    // processDeposit(countStart, Start)
-    
+    console.log(error);  
+    return false  
   }
 
 }
