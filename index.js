@@ -990,8 +990,20 @@ app.post('/startDraw', async (req, res) => {
 // Endpoint to fetch winners
 app.get('/fetchWinners', async (req, res) => {
   try {
-    const winners = await pool.query('SELECT * FROM Winners');
-    res.status(200).json({ winners: winners.rows });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
+      
+      const winners = await pool.query('SELECT * FROM winners');
+      res.status(200).json({ winners: winners.rows, message: 'Winners data fetched successfully' });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error fetching winners', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -1323,14 +1335,14 @@ app.get('/fetchWinners/:batch/:date', async (req, res) => {
   const date = req.params.date;
   try {
       const winnersQuery = await pool.query('SELECT * FROM winners WHERE DATE(won_at) = $1 AND batch_number = $2',[date, batch_number]);
-      if (winnersQuery.rowCount > 0) {
+      // if (winnersQuery.rowCount > 0) {
           const winners = winnersQuery.rows;
           res.status(200).json({ message: `Winners fetched`, winners: winners });
           
-      } else {
-          res.status(400).json({ message: `Winners data does not exist`, winners: null });
+      // } else {
+      //     res.status(404).json({ message: `Winners data does not exist`, winners: null });
           
-      }
+      // }
   } catch (error) {
       console.error(`Error fetching site winners`, error);
       res.status(500).json({ message: 'Internal Server Error' });
