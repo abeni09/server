@@ -947,52 +947,40 @@ app.post('/loginMember', async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 });
-// Endpoint to register a member
-app.post('/registerMember', async (req, res) => {
-  const { email, password, name, phone } = req.body;
-  try {
-    await pool.query('INSERT INTO Members (email, password, name, phone) VALUES ($1, $2, $3, $4)', [email, password, name, phone]);
-    res.status(201).json({ message: 'Member registered successfully' });
-  } catch (error) {
-    console.error('Error during member registration', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-// Endpoint to edit a member
-app.put('/editMember/:id', async (req, res) => {
-  const memberId = req.params.id;
-  const { name, phone } = req.body;
-  try {
-    await pool.query('UPDATE Members SET name = $1, phone = $2 WHERE id = $3', [name, phone, memberId]);
-    res.status(200).json({ message: 'Member updated successfully' });
-  } catch (error) {
-    console.error('Error during member editing', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
 
 app.post('/startDraw', async (req, res) => {
   try {
-    var incrementedDate = 'NOW()'
-    const { drawstarted } = req.body;
-    console.log(drawstarted);
-    const setting = await pool.query('SELECT * FROM sitesettings');
-    const dateAvailable = setting.rows[0].drawstartedat
-    if (dateAvailable != null) {
-      const lastDate = new Date(setting.rows[0].drawstartedat);
-      incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));
-    }
-    // await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
-    await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, incrementedDate]).then(async()=>{
-      // After updating the drawstarted value, check for changes
-      await checkForChanges(drawstarted);
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin')) {
+      var incrementedDate = 'NOW()'
+      const { drawstarted } = req.body;
+      console.log(drawstarted);
+      const setting = await pool.query('SELECT * FROM sitesettings');
+      const dateAvailable = setting.rows[0].drawstartedat
+      if (dateAvailable != null) {
+        const lastDate = new Date(setting.rows[0].drawstartedat);
+        incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));
+      }
+      // await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
+      await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, incrementedDate]).then(async()=>{
+        // After updating the drawstarted value, check for changes
+        await checkForChanges(drawstarted);
 
-      // Retrieve the updated setting after the change
-      const updatedSetting = await pool.query('SELECT * FROM sitesettings');
-      
-      // Respond with the updated setting
-      res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: updatedSetting.rows[0]});
-    });
+        // Retrieve the updated setting after the change
+        const updatedSetting = await pool.query('SELECT * FROM sitesettings');
+        
+        // Respond with the updated setting
+        res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: updatedSetting.rows[0]});
+      });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error starting draw', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -1180,9 +1168,20 @@ app.get('/fetchDeposits', async (req, res) => {
 // Endpoint to fetch members
 app.get('/fetchUsers', async (req, res) => {
   try {
-    const users = await pool.query('SELECT * FROM Users');
-    console.log("Users Count:", users.rowCount);
-    res.status(200).json({ users: users.rows });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin')) {
+      const users = await pool.query('SELECT * FROM Users');
+      console.log("Users Count:", users.rowCount);
+      res.status(200).json({ users: users.rows });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error fetching users', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -1241,35 +1240,48 @@ app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
 app.post('/stopSpinner', async (req, res) => {
   try {
     const { drawnBy, deposit, winnerMember } = req.body;
-
-    // Step 1: Check if conditions are met
-    const checkQuery = `
-      SELECT * 
-      FROM Draw 
-      WHERE id = $1 AND drawn_by = $2 AND used = false AND timer > 0
-    `;
-    const checkResult = await pool.query(checkQuery, [deposit, drawnBy]);
-
-    if (checkResult.rows.length === 0) {
-      return res.status(400).json({ message: 'Conditions not met for stopping spinner' });
+    if (!drawnBy || !deposit || !winnerMember) {
+      return res.status(400).json({message:'Request body is missing'})
     }
-
-    // Step 2: Update the row's used value to true
-    const updateQuery = `
-      UPDATE Draw
-      SET used = true
-      WHERE id = $1
-    `;
-    await pool.query(updateQuery, [deposit]);
-
-    // Step 3: Insert a row in the winners table
-    const insertQuery = `
-      INSERT INTO winners (member_name, deposit_id)
-      VALUES ($1, $2)
-    `;
-    await pool.query(insertQuery, [winnerMember, deposit]);
-
-    res.status(200).json({ message: 'Spinner stopped successfully' });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from members where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user) {
+      // Step 1: Check if conditions are met
+      const checkQuery = `
+        SELECT * 
+        FROM Draw 
+        WHERE id = $1 AND drawn_by = $2 AND used = false AND timer > 0
+      `;
+      const checkResult = await pool.query(checkQuery, [deposit, drawnBy]);
+  
+      if (checkResult.rows.length === 0) {
+        return res.status(400).json({ message: 'Conditions not met for stopping spinner' });
+      }
+  
+      // Step 2: Update the row's used value to true
+      const updateQuery = `
+        UPDATE Draw
+        SET used = true
+        WHERE id = $1
+      `;
+      await pool.query(updateQuery, [deposit]);
+  
+      // Step 3: Insert a row in the winners table
+      const insertQuery = `
+        INSERT INTO winners (member_name, deposit_id)
+        VALUES ($1, $2)
+      `;
+      await pool.query(insertQuery, [winnerMember, deposit]);
+  
+      res.status(200).json({ message: 'Spinner stopped successfully' });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error stopping spinner', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -1469,8 +1481,6 @@ app.post('/updateSiteSettings', async (req, res)=>{
 
     const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
-    // console.log(user);
-    // console.log(checkUser.rowCount);
     if (user && user.role.trim() == 'Admin') {
       const tableName = 'siteSettings'; // Specify your table name
 
@@ -1534,20 +1544,31 @@ app.delete('/deleteMember/:id', async (req, res) => {
     if (!memberId) {
       return res.status(400).json({ message: 'Member ID is required' });
     }
-
-    // Check if the member exists
-    const memberExistQuery = 'SELECT * FROM members WHERE id = $1';
-    const memberExistResult = await pool.query(memberExistQuery, [memberId]);
-
-    if (memberExistResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Member not found' });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
+      // Check if the member exists
+      const memberExistQuery = 'SELECT * FROM members WHERE id = $1';
+      const memberExistResult = await pool.query(memberExistQuery, [memberId]);
+  
+      if (memberExistResult.rows.length === 0) {
+        return res.status(404).json({ message: 'Member not found' });
+      }
+  
+      // Delete the member
+      const deleteMemberQuery = 'DELETE FROM members WHERE id = $1';
+      await pool.query(deleteMemberQuery, [memberId]);
+  
+      return res.status(200).json({ message: 'Member deleted successfully' });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
     }
 
-    // Delete the member
-    const deleteMemberQuery = 'DELETE FROM members WHERE id = $1';
-    await pool.query(deleteMemberQuery, [memberId]);
-
-    return res.status(200).json({ message: 'Member deleted successfully' });
   } catch (error) {
     console.error('Error deleting member:', error.message);
     return res.status(500).json({ message: 'Internal server error' });
@@ -1562,100 +1583,112 @@ app.post('/saveMember', async (req, res) => {
     if (!userData || edit == null) {
       return res.status(400).json({ message: 'Required body parameters are missing' });
     }
-    // console.log(userData.batch_number);
-    // Check if the number of members with the same batch_number has reached a certain limit
-    const maxBatchNumberCountQuery = 'SELECT * FROM sitesettings WHERE id = $1';
-    const maxBatchNumberCountResult = await pool.query(maxBatchNumberCountQuery, [1]);
-    const batchNumberCountQuery = 'SELECT COUNT(*) AS count FROM members WHERE batch_number = $1';
-    const batchNumberCountResult = await pool.query(batchNumberCountQuery, [userData.batch_number]);
-    const batchNumberCount = batchNumberCountResult.rows[0].count;
-    const maxBatchNumberCount = parseInt(maxBatchNumberCountResult.rows[0].maximum_members);
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
 
-    if (batchNumberCount >= maxBatchNumberCount) {
-      if (edit) {
-        const memberQueryResult = await pool.query('SELECT * FROM members WHERE batch_number = $1 and id = $2', [userData.batch_number, userData.id]);
-        if (memberQueryResult.rowCount == 0) {
+      // console.log(userData.batch_number);
+      // Check if the number of members with the same batch_number has reached a certain limit
+      const maxBatchNumberCountQuery = 'SELECT * FROM sitesettings WHERE id = $1';
+      const maxBatchNumberCountResult = await pool.query(maxBatchNumberCountQuery, [1]);
+      const batchNumberCountQuery = 'SELECT COUNT(*) AS count FROM members WHERE batch_number = $1';
+      const batchNumberCountResult = await pool.query(batchNumberCountQuery, [userData.batch_number]);
+      const batchNumberCount = batchNumberCountResult.rows[0].count;
+      const maxBatchNumberCount = parseInt(maxBatchNumberCountResult.rows[0].maximum_members);
+
+      if (batchNumberCount >= maxBatchNumberCount) {
+        if (edit) {
+          const memberQueryResult = await pool.query('SELECT * FROM members WHERE batch_number = $1 and id = $2', [userData.batch_number, userData.id]);
+          if (memberQueryResult.rowCount == 0) {
+            return res.status(400).json({ message: 'Maximum number of members for this batch has been reached' });
+          }
+        } else {
           return res.status(400).json({ message: 'Maximum number of members for this batch has been reached' });
         }
-      } else {
-        return res.status(400).json({ message: 'Maximum number of members for this batch has been reached' });
+      }
+
+      if (edit) {
+        if (!memberId) {
+            return res.status(400).json({ message: 'Required body parameters are missing' });
+        }
+        // If edit is true, construct the UPDATE query dynamically
+        let updateColumns = '';
+        let updateValues = [];
+        let index = 1;
+        Object.keys(userData).forEach(key => {
+            if (userData[key] !== null) {
+                if (key === 'updatedAt') {
+                    updateColumns += `"${key}" = NOW(), `;
+                } else {
+                    updateColumns += `"${key}" = $${index}, `;
+                    updateValues.push(userData[key]);
+                    index++;
+                }
+            }
+        });
+        // Remove the trailing comma and space
+        updateColumns = updateColumns.slice(0, -2);
+    
+        // Add the WHERE clause for the unique identifier
+        updateValues.push(memberId);
+        const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${updateValues.length}`;
+    
+        // Execute the update query
+        await pool.query(updateQuery, updateValues);
+        return res.status(200).json({ message: 'Member updated successfully' });
+      }
+    
+      else {
+
+        // Check if the phone number is unique and has not been used already
+        const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM members WHERE phone = $1';
+        const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
+        const phoneExists = phoneExistsResult.rows[0].count > 0;
+
+        if (phoneExists) {
+          return res.status(400).json({ message: 'Phone number already exists' });
+        }
+        // If edit is false, construct the INSERT query dynamically
+        let insertColumns = '';
+        let insertPlaceholders = '';
+        let insertValues = [];
+        let index = 1;
+        Object.keys(userData).forEach(key => {
+            if (userData[key] !== null) {
+                insertColumns += `"${key}", `;
+                if (key === 'addedAt') {
+                    insertPlaceholders += 'NOW(), ';
+                } else {
+                    insertPlaceholders += `$${index}, `;
+                    insertValues.push(userData[key]);
+                    index++;
+                }
+            }
+        });
+        // Remove the trailing comma and space
+        insertColumns = insertColumns.slice(0, -2);
+        insertPlaceholders = insertPlaceholders.slice(0, -2);
+
+        // Construct the INSERT query only if there are non-null values
+        if (insertColumns !== '') {
+            const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
+
+            // Execute the insert query
+            await pool.query(insertQuery, insertValues);
+            return res.status(200).json({ message: 'New member inserted successfully' });
+        } else {
+            return res.status(400).json({ message: 'No values provided for insertion' });
+        }
+
+
       }
     }
-
-    if (edit) {
-      if (!memberId) {
-          return res.status(400).json({ message: 'Required body parameters are missing' });
-      }
-      // If edit is true, construct the UPDATE query dynamically
-      let updateColumns = '';
-      let updateValues = [];
-      let index = 1;
-      Object.keys(userData).forEach(key => {
-          if (userData[key] !== null) {
-              if (key === 'updatedAt') {
-                  updateColumns += `"${key}" = NOW(), `;
-              } else {
-                  updateColumns += `"${key}" = $${index}, `;
-                  updateValues.push(userData[key]);
-                  index++;
-              }
-          }
-      });
-      // Remove the trailing comma and space
-      updateColumns = updateColumns.slice(0, -2);
-  
-      // Add the WHERE clause for the unique identifier
-      updateValues.push(memberId);
-      const updateQuery = `UPDATE members SET ${updateColumns} WHERE id = $${updateValues.length}`;
-  
-      // Execute the update query
-      await pool.query(updateQuery, updateValues);
-      return res.status(200).json({ message: 'Member updated successfully' });
-    }
-  
-    else {
-
-      // Check if the phone number is unique and has not been used already
-      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM members WHERE phone = $1';
-      const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
-      const phoneExists = phoneExistsResult.rows[0].count > 0;
-
-      if (phoneExists) {
-        return res.status(400).json({ message: 'Phone number already exists' });
-      }
-      // If edit is false, construct the INSERT query dynamically
-      let insertColumns = '';
-      let insertPlaceholders = '';
-      let insertValues = [];
-      let index = 1;
-      Object.keys(userData).forEach(key => {
-          if (userData[key] !== null) {
-              insertColumns += `"${key}", `;
-              if (key === 'addedAt') {
-                  insertPlaceholders += 'NOW(), ';
-              } else {
-                  insertPlaceholders += `$${index}, `;
-                  insertValues.push(userData[key]);
-                  index++;
-              }
-          }
-      });
-      // Remove the trailing comma and space
-      insertColumns = insertColumns.slice(0, -2);
-      insertPlaceholders = insertPlaceholders.slice(0, -2);
-
-      // Construct the INSERT query only if there are non-null values
-      if (insertColumns !== '') {
-          const insertQuery = `INSERT INTO members (${insertColumns}) VALUES (${insertPlaceholders})`;
-
-          // Execute the insert query
-          await pool.query(insertQuery, insertValues);
-          return res.status(200).json({ message: 'New member inserted successfully' });
-      } else {
-          return res.status(400).json({ message: 'No values provided for insertion' });
-      }
-
-
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
     }
   } catch (error) {
     console.error('Error saving member:', error.message);
@@ -1670,20 +1703,30 @@ app.delete('/deleteUser/:id', async (req, res) => {
     if (!UserId) {
       return res.status(400).json({ message: 'User ID is required' });
     }
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && user.role.trim() == 'Admin' && userId != UserId) {
+      // Check if the User exists
+      const UserExistQuery = 'SELECT * FROM Users WHERE id = $1';
+      const UserExistResult = await pool.query(UserExistQuery, [UserId]);
 
-    // Check if the User exists
-    const UserExistQuery = 'SELECT * FROM Users WHERE id = $1';
-    const UserExistResult = await pool.query(UserExistQuery, [UserId]);
+      if (UserExistResult.rows.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
 
-    if (UserExistResult.rows.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
+      // Delete the User
+      const deleteUserQuery = 'DELETE FROM Users WHERE id = $1';
+      await pool.query(deleteUserQuery, [UserId]);
+
+      return res.status(200).json({ message: 'User deleted successfully' });
     }
-
-    // Delete the User
-    const deleteUserQuery = 'DELETE FROM Users WHERE id = $1';
-    await pool.query(deleteUserQuery, [UserId]);
-
-    return res.status(200).json({ message: 'User deleted successfully' });
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error deleting User:', error.message);
     return res.status(500).json({ message: 'Internal server error' });
@@ -1697,80 +1740,92 @@ app.post('/saveUser', async (req, res) => {
     if (!userData || edit == null) {
       return res.status(400).json({ message: 'Required body parameters are missing' });
     }
-    if (edit) {
-      if (!memberId) {
-          return res.status(400).json({ message: 'Required body parameters are missing' });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
+
+      if (edit) {
+        if (!memberId) {
+            return res.status(400).json({ message: 'Required body parameters are missing' });
+        }
+        // If edit is true, construct the UPDATE query dynamically
+        let updateColumns = '';
+        let updateValues = [];
+        let index = 1;
+        Object.keys(userData).forEach(key => {
+            if (userData[key] !== null) {
+                if (key === 'updated_at') {
+                    updateColumns += `"${key}" = NOW(), `;
+                } else {
+                    updateColumns += `"${key}" = $${index}, `;
+                    updateValues.push(userData[key]);
+                    index++;
+                }
+            }
+        });
+        // Remove the trailing comma and space
+        updateColumns = updateColumns.slice(0, -2);
+    
+        // Add the WHERE clause for the unique identifier
+        updateValues.push(memberId);
+        const updateQuery = `UPDATE users SET ${updateColumns} WHERE id = $${updateValues.length}`;
+    
+        // Execute the update query
+        await pool.query(updateQuery, updateValues);
+        return res.status(200).json({ message: 'User updated successfully' });
       }
-      // If edit is true, construct the UPDATE query dynamically
-      let updateColumns = '';
-      let updateValues = [];
-      let index = 1;
-      Object.keys(userData).forEach(key => {
-          if (userData[key] !== null) {
-              if (key === 'updated_at') {
-                  updateColumns += `"${key}" = NOW(), `;
-              } else {
-                  updateColumns += `"${key}" = $${index}, `;
-                  updateValues.push(userData[key]);
-                  index++;
-              }
-          }
-      });
-      // Remove the trailing comma and space
-      updateColumns = updateColumns.slice(0, -2);
+    
+      else {
+        // Check if the phone number is unique and has not been used already
+        const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM users WHERE phone = $1';
+        const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
+        const phoneExists = phoneExistsResult.rows[0].count > 0;
   
-      // Add the WHERE clause for the unique identifier
-      updateValues.push(memberId);
-      const updateQuery = `UPDATE users SET ${updateColumns} WHERE id = $${updateValues.length}`;
+        if (phoneExists) {
+          console.error('Phone number already exists');
+          return res.status(400).json({ message: 'Phone number already exists' });
+        }
+        // If edit is false, construct the INSERT query dynamically
+        let insertColumns = '';
+        let insertPlaceholders = '';
+        let insertValues = [];
+        let index = 1;
+        Object.keys(userData).forEach(key => {
+            if (userData[key] !== null) {
+                insertColumns += `"${key}", `;
+                if (key === 'created_at') {
+                    insertPlaceholders += 'NOW(), ';
+                } else {
+                    insertPlaceholders += `$${index}, `;
+                    insertValues.push(userData[key]);
+                    index++;
+                }
+            }
+        });
+        // Remove the trailing comma and space
+        insertColumns = insertColumns.slice(0, -2);
+        insertPlaceholders = insertPlaceholders.slice(0, -2);
   
-      // Execute the update query
-      await pool.query(updateQuery, updateValues);
-      return res.status(200).json({ message: 'User updated successfully' });
+        // Construct the INSERT query only if there are non-null values
+        if (insertColumns !== '') {
+            const insertQuery = `INSERT INTO users (${insertColumns}) VALUES (${insertPlaceholders})`;
+  
+            // Execute the insert query
+            await pool.query(insertQuery, insertValues);
+            return res.status(200).json({ message: 'New user inserted successfully' });
+        } else {
+            return res.status(400).json({ message: 'No values provided for insertion' });
+        }
+  
+  
+      }
     }
-  
-    else {
-      // Check if the phone number is unique and has not been used already
-      const phoneExistsQuery = 'SELECT COUNT(*) AS count FROM users WHERE phone = $1';
-      const phoneExistsResult = await pool.query(phoneExistsQuery, [userData.phone]);
-      const phoneExists = phoneExistsResult.rows[0].count > 0;
-
-      if (phoneExists) {
-        console.error('Phone number already exists');
-        return res.status(400).json({ message: 'Phone number already exists' });
-      }
-      // If edit is false, construct the INSERT query dynamically
-      let insertColumns = '';
-      let insertPlaceholders = '';
-      let insertValues = [];
-      let index = 1;
-      Object.keys(userData).forEach(key => {
-          if (userData[key] !== null) {
-              insertColumns += `"${key}", `;
-              if (key === 'created_at') {
-                  insertPlaceholders += 'NOW(), ';
-              } else {
-                  insertPlaceholders += `$${index}, `;
-                  insertValues.push(userData[key]);
-                  index++;
-              }
-          }
-      });
-      // Remove the trailing comma and space
-      insertColumns = insertColumns.slice(0, -2);
-      insertPlaceholders = insertPlaceholders.slice(0, -2);
-
-      // Construct the INSERT query only if there are non-null values
-      if (insertColumns !== '') {
-          const insertQuery = `INSERT INTO users (${insertColumns}) VALUES (${insertPlaceholders})`;
-
-          // Execute the insert query
-          await pool.query(insertQuery, insertValues);
-          return res.status(200).json({ message: 'New user inserted successfully' });
-      } else {
-          return res.status(400).json({ message: 'No values provided for insertion' });
-      }
-
-
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
     }
   } catch (error) {
     console.error('Error saving user:', error.message);
