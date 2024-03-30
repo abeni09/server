@@ -1001,10 +1001,21 @@ app.get('/fetchWinners', async (req, res) => {
 // Endpoint to fetch members
 app.get('/fetchMembers', async (req, res) => {
   try {
-    // const members = await pool.query('SELECT * FROM Members order by id limit 10');
-    const members = await pool.query('SELECT * FROM Members order by id desc');
-    console.log("Members Count:", members.rowCount);
-    res.status(200).json({ members: members.rows });
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    if (user) {
+      // const members = await pool.query('SELECT * FROM Members order by id limit 10');
+      const members = await pool.query('SELECT * FROM Members order by id desc');
+      console.log("Members Count:", members.rowCount);
+      res.status(200).json({ members: members.rows });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
   } catch (error) {
     console.error('Error fetching members', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -1174,7 +1185,7 @@ app.get('/fetchUsers', async (req, res) => {
     const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin')) {
-      const users = await pool.query('SELECT * FROM Users');
+      const users = await pool.query('SELECT * FROM Users where id != $1', [userId]);
       console.log("Users Count:", users.rowCount);
       res.status(200).json({ users: users.rows });
     }
