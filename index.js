@@ -953,7 +953,7 @@ app.post('/startDraw', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin')) {
       var incrementedDate = 'NOW()'
@@ -993,11 +993,15 @@ app.get('/fetchWinners', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
       
-      const winners = await pool.query('SELECT * FROM winners');
+      const winners = await pool.query(
+        `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+        FROM winners
+        JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
+        JOIN members ON lottonumbers.member = members.id`);
       res.status(200).json({ winners: winners.rows, message: 'Winners data fetched successfully' });
     }
     else{
@@ -1009,6 +1013,29 @@ app.get('/fetchWinners', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+app.get('/fetchWinners/:batch/:date', async (req, res) => {
+  const batch_number = req.params.batch;
+  const date = req.params.date;
+  try {
+    const winnersQuery = await pool.query(
+      `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+       FROM winners
+       JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
+       JOIN members ON lottonumbers.member = members.id
+       WHERE DATE(winners.won_at) = $1 AND winners.batch_number = $2`,
+      [date, batch_number]
+    );
+    // const winners = winnersQuery.rows;
+    res.status(200).json({ message: `Winners fetched`, winners: winnersQuery.rows });
+    // if (winnersQuery.rowCount > 0) {
+    // } else {
+    //   res.status(404).json({ message: `Winners data does not exist`, winners: null });
+    // }
+  } catch (error) {
+    console.error(`Error fetching site winners`, error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 // Endpoint to fetch members
 app.get('/fetchMembers', async (req, res) => {
@@ -1016,7 +1043,7 @@ app.get('/fetchMembers', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user) {
       // const members = await pool.query('SELECT * FROM Members order by id limit 10');
@@ -1194,7 +1221,7 @@ app.get('/fetchUsers', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin')) {
       const users = await pool.query('SELECT * FROM Users where id != $1', [userId]);
@@ -1329,25 +1356,6 @@ app.get('/fetchSiteSettings', async (req, res) => {
       res.status(500).json({ message: 'Internal Server Error' });
   }
 });  
-// Endpoint to fetch winners from a table
-app.get('/fetchWinners/:batch/:date', async (req, res) => {
-  const batch_number = req.params.batch;
-  const date = req.params.date;
-  try {
-      const winnersQuery = await pool.query('SELECT * FROM winners WHERE DATE(won_at) = $1 AND batch_number = $2',[date, batch_number]);
-      // if (winnersQuery.rowCount > 0) {
-          const winners = winnersQuery.rows;
-          res.status(200).json({ message: `Winners fetched`, winners: winners });
-          
-      // } else {
-      //     res.status(404).json({ message: `Winners data does not exist`, winners: null });
-          
-      // }
-  } catch (error) {
-      console.error(`Error fetching site winners`, error);
-      res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
 
 // // Endpoint to process deposit, fetch members, and perform required operations
 // app.post('/processDeposit', async (req, res) => {
@@ -1502,7 +1510,7 @@ app.post('/updateSiteSettings', async (req, res)=>{
         return res.status(400).json({ success: false, message: 'Request body or editedItem is missing.' });
     }
 
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && user.role.trim() == 'Admin') {
       const tableName = 'siteSettings'; // Specify your table name
@@ -1570,7 +1578,7 @@ app.delete('/deleteMember/:id', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
       // Check if the member exists
@@ -1609,7 +1617,7 @@ app.post('/saveMember', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
 
@@ -1729,7 +1737,7 @@ app.delete('/deleteUser/:id', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && user.role.trim() == 'Admin' && userId != UserId) {
       // Check if the User exists
@@ -1766,7 +1774,7 @@ app.post('/saveUser', async (req, res) => {
     const userId = req.user.userId
     console.log(userId);
     
-    const checkUser = await pool.query('select * from public."users" where id = $1', [parseInt(userId)])
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
 
