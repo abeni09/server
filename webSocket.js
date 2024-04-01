@@ -77,7 +77,7 @@ function fetchTodaysCandidates(memberId) {
 
 // Update online status of a member in the members table
 function updateMemberOnlineStatus(memberId, online) {
-    const query = 'UPDATE members SET online = $1 WHERE id = $2';
+    const query = 'UPDATE members SET isonline = $1 WHERE id = $2';
     pool.query(query, [online, memberId], (err, result) => {
         if (err) {
             console.error('Error updating online status:', err);
