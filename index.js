@@ -239,15 +239,17 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         insertQuery = await pool.query(
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
           VALUES ($1, CURRENT_TIMESTAMP, CURRENT_DATE, $2, false, $3) 
-          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+          RETURNING *`, // Include RETURNING clause to get the newly inserted row's ID
           [drawer.id, countdownSeconds, batchNumber]
         );
         
       }
 
-      const newDrawId = insertQuery.rows[0].id; // Retrieve the newly inserted row's ID
+      const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
+      const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
 
       console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
+      await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, newDraw]);
 
       return newDrawId; // Return the newly inserted row's ID
     } else {
@@ -275,7 +277,7 @@ function startTimerListener(drawId, member_spin_timeout) {
       if (drawQuery.rows.length > 0) {
         // Decrease the timer by 1 second
         const drawRecord = drawQuery.rows[0];
-        const { timer, used } = drawRecord;
+        const { timer, used, drawn_by } = drawRecord;
         const updatedTimer = timer - 1;
 
         if (used) {
@@ -290,6 +292,8 @@ function startTimerListener(drawId, member_spin_timeout) {
             `UPDATE Draw SET timer = $1 WHERE id = $2`,
             [updatedTimer, drawId]
           );
+          await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": $1, "newData": $2}')`, [drawn_by, updatedTimer]);
+    
   
           console.log(`Timer decreased for draw record with ID ${drawId}: ${updatedTimer} seconds remaining`);
   
@@ -852,48 +856,48 @@ async function createTriggers() {
     .catch((error) => {
         console.error("Error creating check draw started trigger:", error);
     });
-    await pool.query(drawTriggerQuery)
-    .then(() => {
-        console.log("DrawStart trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger draw started:", error);
-    });
-    await pool.query(countdownTriggerQuery)
-    .then(() => {
-        console.log("Countdown trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger countdown:", error);
-    });
-    await pool.query(drawerSelectedTriggerQuery)
-    .then(() => {
-        console.log("Drawer Selected trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger drawer selected:", error);
-    });
-    await pool.query(notifyChannelOfNewDrawRow)
-    .then(() => {
-        console.log("New Draw trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger new draw:", error);
-    });
-    await pool.query(notifyChannelOfUpdatedDrawRow)
-    .then(() => {
-        console.log("update draw trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger update draw:", error);
-    });
-    await pool.query(notifyChannelOfNewWinnerRow)
-    .then(() => {
-        console.log("New Winner trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger New Winner:", error);
-    });
+    // await pool.query(drawTriggerQuery)
+    // .then(() => {
+    //     console.log("DrawStart trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger draw started:", error);
+    // });
+    // await pool.query(countdownTriggerQuery)
+    // .then(() => {
+    //     console.log("Countdown trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger countdown:", error);
+    // });
+    // await pool.query(drawerSelectedTriggerQuery)
+    // .then(() => {
+    //     console.log("Drawer Selected trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger drawer selected:", error);
+    // });
+    // await pool.query(notifyChannelOfNewDrawRow)
+    // .then(() => {
+    //     console.log("New Draw trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger new draw:", error);
+    // });
+    // await pool.query(notifyChannelOfUpdatedDrawRow)
+    // .then(() => {
+    //     console.log("update draw trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger update draw:", error);
+    // });
+    // await pool.query(notifyChannelOfNewWinnerRow)
+    // .then(() => {
+    //     console.log("New Winner trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger New Winner:", error);
+    // });
     
   } catch (error) {
     console.log(error);
