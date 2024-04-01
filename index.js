@@ -294,8 +294,8 @@ function startTimerListener(drawId, member_spin_timeout) {
             `UPDATE Draw SET timer = $1 WHERE id = $2`,
             [updatedTimer, drawId]
           );
-          await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": $1, "newData": $2}')`, [drawn_by, updatedTimer]);
-    
+          await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": ${drawn_by}, "newData": ${updatedTimer}}')`);
+
   
           console.log(`Timer decreased for draw record with ID ${drawId}: ${updatedTimer} seconds remaining`);
   
