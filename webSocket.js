@@ -194,6 +194,7 @@ const queryNewWinner = 'LISTEN winner_update';
     // Listen for notifications
     client.on('notification', (notification) => {
         try {
+            console.log(notification.payload);
             const payload = JSON.parse(notification.payload);
             console.log('Received notification:', payload);
             const {table_name, operation, drawn_by, newData} = payload

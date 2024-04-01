@@ -813,19 +813,33 @@ async function createTriggers() {
   EXECUTE FUNCTION check_draw_started();
   `  
   const notifyChannelOfNewDrawRow = `
-    CREATE OR REPLACE FUNCTION notify_new_draw_row()
-    RETURNS TRIGGER AS $$
-    BEGIN
-      -- Emit a notification on the 'draw_insert' channel
-      PERFORM pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": NEW.drawn_by, "newData": NEW}');
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-    
-    CREATE OR REPLACE TRIGGER new_draw_row_trigger
-    AFTER INSERT ON draw
-    FOR EACH ROW
-    EXECUTE FUNCTION notify_new_draw_row();
+  CREATE OR REPLACE FUNCTION notify_new_draw_row()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Emit a notification on the 'draw_insert' channel
+    PERFORM pg_notify('draw_insert', 
+      json_build_object(
+        'table_name', 'draw',
+        'operation', 'INSERT',
+        'drawn_by', NEW.drawn_by,
+        'newData', json_build_object(
+          'id', NEW.id,
+          'drawn_at', NEW.drawn_at,
+          'draw_date', NEW.draw_date,
+          'timer', NEW.timer,
+          'used', NEW.used,
+          'batch_number', NEW.batch_number
+        )
+      )::text
+    );
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  CREATE TRIGGER new_draw_row_trigger
+  AFTER INSERT ON draw
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_new_draw_row();
   `
   const notifyChannelOfUpdatedDrawRow = `
     CREATE OR REPLACE FUNCTION notify_update_draw_row()
