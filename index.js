@@ -249,7 +249,9 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
       const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
 
       console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
-      await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, newDraw]);
+      // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
+      // Correct query string for sending notification
+      await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
 
       return newDrawId; // Return the newly inserted row's ID
     } else {
