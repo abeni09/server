@@ -799,7 +799,51 @@ async function createTriggers() {
   FOR EACH ROW
   EXECUTE FUNCTION check_draw_started();
   `  
+  const notifyChannelOfNewDrawRow = `
+    CREATE OR REPLACE FUNCTION notify_new_draw_row()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      -- Emit a notification on the 'draw_insert' channel
+      PERFORM pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": NEW.drawn_by, "newData": NEW}');
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    CREATE OR REPLACE TRIGGER new_draw_row_trigger
+    AFTER INSERT ON draw
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_new_draw_row();
+  `
+  const notifyChannelOfUpdatedDrawRow = `
+    CREATE OR REPLACE FUNCTION notify_update_draw_row()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      -- Emit a notification on the 'draw_update' channel
+      PERFORM pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": NEW.drawn_by, "newData": NEW}');
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    CREATE OR REPLACE TRIGGER update_draw_row_trigger
+    AFTER INSERT ON draw
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_update_draw_row();
+  `
+  const notifyChannelOfNewWinnerRow = `
+  CREATE OR REPLACE FUNCTION notify_new_winner_row()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Emit a notification on the 'winner_insert' channel
+    PERFORM pg_notify('winner_insert', '{"table_name": "winners", "operation": "INSERT", "drawn_by": NEW.lotto_number, "newData": NEW}');
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
 
+  CREATE OR REPLACE TRIGGER new_winner_row_trigger
+  AFTER INSERT ON draw
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_new_winner_row();
+  `
   try {
     await pool.query(checkDrawStartedTriggerQuery)
     .then(() => {
@@ -808,27 +852,48 @@ async function createTriggers() {
     .catch((error) => {
         console.error("Error creating check draw started trigger:", error);
     });
-    // await pool.query(drawTriggerQuery)
-    // .then(() => {
-    //     console.log("DrawStart trigger created successfully");
-    // })
-    // .catch((error) => {
-    //     console.error("Error creating trigger draw started:", error);
-    // });
-    // await pool.query(countdownTriggerQuery)
-    // .then(() => {
-    //     console.log("Countdown trigger created successfully");
-    // })
-    // .catch((error) => {
-    //     console.error("Error creating trigger countdown:", error);
-    // });
-    // await pool.query(drawerSelectedTriggerQuery)
-    // .then(() => {
-    //     console.log("Drawer Selected trigger created successfully");
-    // })
-    // .catch((error) => {
-    //     console.error("Error creating trigger drawer selected:", error);
-    // });
+    await pool.query(drawTriggerQuery)
+    .then(() => {
+        console.log("DrawStart trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger draw started:", error);
+    });
+    await pool.query(countdownTriggerQuery)
+    .then(() => {
+        console.log("Countdown trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger countdown:", error);
+    });
+    await pool.query(drawerSelectedTriggerQuery)
+    .then(() => {
+        console.log("Drawer Selected trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger drawer selected:", error);
+    });
+    await pool.query(notifyChannelOfNewDrawRow)
+    .then(() => {
+        console.log("New Draw trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger new draw:", error);
+    });
+    await pool.query(notifyChannelOfUpdatedDrawRow)
+    .then(() => {
+        console.log("update draw trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger update draw:", error);
+    });
+    await pool.query(notifyChannelOfNewWinnerRow)
+    .then(() => {
+        console.log("New Winner trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger New Winner:", error);
+    });
     
   } catch (error) {
     console.log(error);

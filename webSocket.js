@@ -23,6 +23,7 @@ wss.on('connection', (ws, request) => {
     if (clients.has(clientId)) {
         console.log(`Closing previous connection for client ${clientId}`);
         clients.get(clientId).close();
+        clients.delete(clientId); // Remove client from the map
     }
     
     clients.set(clientId, ws); // Store client with its ID
@@ -45,31 +46,58 @@ wss.on('connection', (ws, request) => {
 
 function fetchTodaysCandidates(memberId) {
     return new Promise((resolve, reject) => {
-        pool.query('SELECT batch_number FROM members WHERE id = $1', [memberId], (err, result) => {
+        pool.connect((err, client, done) => {
             if (err) {
+                done(err);
                 reject(err);
                 return;
             }
-
-            const batch = result.rows[0].batch_number;
-
-            pool.query('SELECT drawstartedat FROM SiteSettings', (err, result) => {
+            client.query('SELECT batch_number FROM members WHERE id = $1', [memberId], (err, result) => {
+                done(); // Release the connection back to the pool
                 if (err) {
                     reject(err);
                     return;
                 }
+                const batch = result.rows[0].batch_number;
 
-                const drawstartedat = result.rows[0].drawstartedat;
-
-                const query = 'SELECT lotto_number, id FROM lottonumbers WHERE batch_number = $1 AND winner = $2 AND expired = $3 AND DATE(deposited_at) = DATE($4) ORDER BY RANDOM()';
-                pool.query(query, [batch, false, false, drawstartedat], (err, result) => {
+                pool.query('SELECT drawstartedat FROM SiteSettings', (err, result) => {
                     if (err) {
                         reject(err);
                         return;
                     }
 
-                    resolve(result.rows);
+                    const drawstartedat = result.rows[0].drawstartedat;
+
+                    const query = 'SELECT lotto_number, id FROM lottonumbers WHERE batch_number = $1 AND winner = $2 AND expired = $3 AND DATE(deposited_at) = DATE($4) ORDER BY RANDOM()';
+                    pool.query(query, [batch, false, false, drawstartedat], (err, result) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+
+                        resolve(result.rows);
+                    });
                 });
+            });
+        });
+    });
+}
+
+function getWinnerMember(lotto_number_id) {
+    return new Promise((resolve, reject) => {
+        pool.connect((err, client, done) => {
+            if (err) {
+                done(err);
+                reject(err);
+                return;
+            }
+            client.query('SELECT member FROM lottonumbers WHERE id = $1', [lotto_number_id], (err, result) => {
+                done(); // Release the connection back to the pool
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(result.rows);
             });
         });
     });
@@ -77,30 +105,69 @@ function fetchTodaysCandidates(memberId) {
 
 // Update online status of a member in the members table
 function updateMemberOnlineStatus(memberId, online) {
-    const query = 'UPDATE members SET isonline = $1 WHERE id = $2';
-    pool.query(query, [online, memberId], (err, result) => {
+    pool.connect((err, client, done) => {
         if (err) {
-            console.error('Error updating online status:', err);
-        } else {
-            console.log(`Member ${memberId} online status updated to ${online}`);
+            console.error('Error connecting to the pool:', err);
+            return;
         }
+        const query = 'UPDATE members SET isonline = $1 WHERE id = $2';
+        client.query(query, [online, memberId], (err, result) => {
+            done(); // Release the connection back to the pool
+            if (err) {
+                console.error('Error updating online status:', err);
+            } else {
+                console.log(`Member ${memberId} online status updated to ${online}`);
+            }
+        });
     });
 }
 
 // Listen for database changes on the specific table
-const query = 'LISTEN table_inserts';
+const queryNewDraw = 'LISTEN draw_insert';
+const queryUpdateDraw = 'LISTEN draw_update';
+const queryNewWinner = 'LISTEN winner_update';
 pool.connect((err, client, done) => {
     if (err) {
-        console.error('Error connecting to pool:', err);
+        console.error('Error connecting to new draw pool:', err);
         return;
     }
-    client.query(query, (err) => {
+    client.query(queryNewDraw, (err) => {
         done();
         if (err) {
-            console.error('Error listening for database changes:', err);
+            console.error('Error listening for new draw database changes:', err);
         }
         else {
-            console.log('Listening for draw table changes');
+            console.log('Listening for new draw changes');
+        }
+    });
+});
+pool.connect((err, client, done) => {
+    if (err) {
+        console.error('Error connecting to update draw pool:', err);
+        return;
+    }
+    client.query(queryUpdateDraw, (err) => {
+        done();
+        if (err) {
+            console.error('Error listening for update draw changes:', err);
+        }
+        else {
+            console.log('Listening for update draw changes');
+        }
+    });
+});
+pool.connect((err, client, done) => {
+    if (err) {
+        console.error('Error connecting to new winner pool:', err);
+        return;
+    }
+    client.query(queryNewWinner, (err) => {
+        done();
+        if (err) {
+            console.error('Error listening for new winner changes:', err);
+        }
+        else {
+            console.log('Listening for new winner changes');
         }
     });
 });
@@ -145,16 +212,21 @@ pool.on('notification', (msg) => {
             client.send(JSON.stringify(message));
         }
         else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by)) {
-            const client = clients.get(drawn_by);
-            console.log(`Sending winner data to client ${drawn_by}`);
-
-            // Construct the message object including table name and new data
-            const message = {
-                table: table_name,
-                operation: operation,
-                data: newData
-            };
-            client.send(JSON.stringify(message));
+            getWinnerMember(drawn_by)
+                .then((winnerID)=>{
+                const client = clients.get(winnerID);
+                console.log(`Sending winner data to client ${winnerID}`);
+                // Construct the message object including table name and new data
+                const message = {
+                    table: table_name,
+                    operation: operation,
+                    data: newData
+                };
+                client.send(JSON.stringify(message));
+                })
+                .catch((err) => {
+                    console.error('Error fetching winner id:', err);
+                });
         }
     } catch (error) {
         console.error('Error parsing notification payload:', error);
