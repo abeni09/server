@@ -247,13 +247,13 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
 
       const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
       const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
-      const newDrawerQuery = await pool.query(
-        `SELECT * FROM draw 
-        WHERE id = $1`,
-        [newDrawId]
-      );
+      // const newDrawerQuery = await pool.query(
+      //   `SELECT * FROM draw 
+      //   WHERE id = $1`,
+      //   [newDrawId]
+      // );
   
-      const newDrawer = newDrawerQuery.rows[0];
+      // const newDrawer = newDrawerQuery.rows[0];
 
       console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
       // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
@@ -836,38 +836,66 @@ async function createTriggers() {
   END;
   $$ LANGUAGE plpgsql;
   
-  CREATE TRIGGER new_draw_row_trigger
+  CREATE OR REPLACE TRIGGER new_draw_row_trigger
   AFTER INSERT ON draw
   FOR EACH ROW
   EXECUTE FUNCTION notify_new_draw_row();
   `
   const notifyChannelOfUpdatedDrawRow = `
-    CREATE OR REPLACE FUNCTION notify_update_draw_row()
-    RETURNS TRIGGER AS $$
-    BEGIN
-      -- Emit a notification on the 'draw_update' channel
-      PERFORM pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": NEW.drawn_by, "newData": NEW}');
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-    
-    CREATE OR REPLACE TRIGGER update_draw_row_trigger
-    AFTER INSERT ON draw
-    FOR EACH ROW
-    EXECUTE FUNCTION notify_update_draw_row();
+  CREATE OR REPLACE FUNCTION notify_update_draw_row()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Emit a notification on the 'draw_update' channel
+    PERFORM pg_notify('draw_update', 
+      json_build_object(
+        'table_name', 'draw',
+        'operation', 'UPDATE',
+        'drawn_by', NEW.drawn_by,
+        'newData', json_build_object(
+          'id', NEW.id,
+          'drawn_at', NEW.drawn_at,
+          'draw_date', NEW.draw_date,
+          'timer', NEW.timer,
+          'used', NEW.used,
+          'batch_number', NEW.batch_number
+        )
+      )::text
+    );
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  CREATE OR REPLACE TRIGGER update_draw_row_trigger
+  AFTER INSERT ON draw
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_update_draw_row();
   `
   const notifyChannelOfNewWinnerRow = `
   CREATE OR REPLACE FUNCTION notify_new_winner_row()
   RETURNS TRIGGER AS $$
   BEGIN
     -- Emit a notification on the 'winner_insert' channel
-    PERFORM pg_notify('winner_insert', '{"table_name": "winners", "operation": "INSERT", "drawn_by": NEW.lotto_number, "newData": NEW}');
+    PERFORM pg_notify('winner_insert', 
+      json_build_object(
+        'table_name', 'winners',
+        'operation', 'INSERT',
+        'drawn_by', NEW.lotto_number,
+        'newData', json_build_object(
+          'id', NEW.id,
+          'lotto_number', NEW.lotto_number,
+          'winner', NEW.winner,
+          'expired', NEW.expired,
+          'deposited_at', NEW.deposited_at,
+          'batch_number', NEW.batch_number
+        )
+      )::text
+    );
     RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
-
+  
   CREATE OR REPLACE TRIGGER new_winner_row_trigger
-  AFTER INSERT ON draw
+  AFTER INSERT ON winners
   FOR EACH ROW
   EXECUTE FUNCTION notify_new_winner_row();
   `
