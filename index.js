@@ -1037,6 +1037,30 @@ app.get('/fetchWinners/:batch/:date', async (req, res) => {
   }
 });
 
+app.get('/fetchWinners/:batch', async (req, res) => {
+  const batch_number = req.params.batch;
+  const date = req.params.date;
+  try {
+    const winnersQuery = await pool.query(
+      `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+       FROM winners
+       JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
+       JOIN members ON lottonumbers.member = members.id
+       WHERE winners.batch_number = $2`,
+      [date, batch_number]
+    );
+    // const winners = winnersQuery.rows;
+    res.status(200).json({ message: `Winners fetched`, winners: winnersQuery.rows });
+    // if (winnersQuery.rowCount > 0) {
+    // } else {
+    //   res.status(404).json({ message: `Winners data does not exist`, winners: null });
+    // }
+  } catch (error) {
+    console.error(`Error fetching site winners`, error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // Endpoint to fetch members
 app.get('/fetchMembers', async (req, res) => {
   try {
