@@ -126,48 +126,36 @@ function updateMemberOnlineStatus(memberId, online) {
 const queryNewDraw = 'LISTEN draw_insert';
 const queryUpdateDraw = 'LISTEN draw_update';
 const queryNewWinner = 'LISTEN winner_update';
-pool.connect((err, client, done) => {
+pool.connect((err, client, release) => {
     if (err) {
         console.error('Error connecting to new draw pool:', err);
         return;
     }
     client.query(queryNewDraw, (err) => {
-        done();
+        // release();
         if (err) {
-            console.error('Error listening for new draw database changes:', err);
+            return console.error('Error listening for new draw database changes:', err);
         }
         else {
             console.log('Listening for new draw changes');
-        }
-    });
-});
-pool.connect((err, client, done) => {
-    if (err) {
-        console.error('Error connecting to update draw pool:', err);
-        return;
-    }
-    client.query(queryUpdateDraw, (err) => {
-        done();
-        if (err) {
-            console.error('Error listening for update draw changes:', err);
-        }
-        else {
-            console.log('Listening for update draw changes');
-        }
-    });
-});
-pool.connect((err, client, done) => {
-    if (err) {
-        console.error('Error connecting to new winner pool:', err);
-        return;
-    }
-    client.query(queryNewWinner, (err) => {
-        done();
-        if (err) {
-            console.error('Error listening for new winner changes:', err);
-        }
-        else {
-            console.log('Listening for new winner changes');
+            client.query(queryUpdateDraw, (err) => {
+                // release();
+                if (err) {
+                    return console.error('Error listening for update draw changes:', err);
+                }
+                else {
+                    console.log('Listening for update draw changes');
+                    client.query(queryNewWinner, (err) => {
+                        // release();
+                        if (err) {
+                            return console.error('Error listening for new winner changes:', err);
+                        }
+                        else {
+                            console.log('Listening for new winner changes');
+                        }
+                    });
+                }
+            });
         }
     });
 });
