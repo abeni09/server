@@ -852,12 +852,8 @@ async function createTriggers() {
         'operation', 'UPDATE',
         'drawn_by', NEW.drawn_by,
         'newData', json_build_object(
-          'id', NEW.id,
-          'drawn_at', NEW.drawn_at,
-          'draw_date', NEW.draw_date,
           'timer', NEW.timer,
-          'used', NEW.used,
-          'batch_number', NEW.batch_number
+          'used', NEW.used
         )
       )::text
     );
@@ -866,8 +862,9 @@ async function createTriggers() {
   $$ LANGUAGE plpgsql;
   
   CREATE OR REPLACE TRIGGER update_draw_row_trigger
-  AFTER INSERT ON draw
+  BEFORE UPDATE ON draw
   FOR EACH ROW
+  WHEN (OLD.timer IS DISTINCT FROM NEW.timer)
   EXECUTE FUNCTION notify_update_draw_row();
   `
   const notifyChannelOfNewWinnerRow = `
@@ -883,9 +880,9 @@ async function createTriggers() {
         'newData', json_build_object(
           'id', NEW.id,
           'lotto_number', NEW.lotto_number,
+          'draw_id', NEW.draw_id,
           'winner', NEW.winner,
-          'expired', NEW.expired,
-          'deposited_at', NEW.deposited_at,
+          'won_at', NEW.won_at,
           'batch_number', NEW.batch_number
         )
       )::text
