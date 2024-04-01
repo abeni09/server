@@ -1046,8 +1046,8 @@ app.get('/fetchWinners/:batch', async (req, res) => {
        FROM winners
        JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
        JOIN members ON lottonumbers.member = members.id
-       WHERE winners.batch_number = $2`,
-      [date, batch_number]
+       WHERE winners.batch_number = $1`,
+      [batch_number]
     );
     // const winners = winnersQuery.rows;
     res.status(200).json({ message: `Winners fetched`, winners: winnersQuery.rows });
