@@ -223,6 +223,7 @@ const queryNewWinner = 'LISTEN winner_update';
                             data: newData,
                             candidates: candidates
                         };
+                        console.log(candidates);
                         client.send(JSON.stringify(message));
                     })
                     .catch((err) => {
