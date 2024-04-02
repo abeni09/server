@@ -141,7 +141,7 @@ const queryNewWinner = 'LISTEN winner_update';
 //         const { table_name, operation, drawn_by, newData } = payload;
 
 //         // Check if the notification is for an INSERT operation on the "draw" table
-//         if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by)) {
+//         if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
 //             const client = clients.get(drawn_by);
 //             console.log(`Sending draw data to client ${drawn_by}`);
             
@@ -161,7 +161,7 @@ const queryNewWinner = 'LISTEN winner_update';
 //                     console.error('Error fetching candidates:', err);
 //                 });
 //         }
-//         else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by)) {
+//         else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by.toString())) {
 //             const client = clients.get(drawn_by);
 //             console.log(`Sending draw countdown data to client ${drawn_by}`);
             
@@ -172,7 +172,7 @@ const queryNewWinner = 'LISTEN winner_update';
 //             };
 //             client.send(JSON.stringify(message));
 //         }
-//         else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by)) {
+//         else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
 //             getWinnerMember(drawn_by)
 //                 .then((winnerID)=>{
 //                 const client = clients.get(winnerID);
@@ -211,7 +211,7 @@ const queryNewWinner = 'LISTEN winner_update';
             console.log(clients.has(`${drawn_by}`));
 
 //         // Check if the notification is for an INSERT operation on the "draw" table
-            if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by)) {
+            if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
                 const client = clients.get(drawn_by);
                 console.log(`Sending draw data to client ${drawn_by}`);
                 
@@ -229,7 +229,7 @@ const queryNewWinner = 'LISTEN winner_update';
                         console.error('Error fetching candidates:', err);
                     });
             }
-            else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by)) {
+            else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by.toString())) {
                 const client = clients.get(drawn_by);
                 console.log(`Sending draw countdown data to client ${drawn_by}`);
                 
@@ -238,7 +238,7 @@ const queryNewWinner = 'LISTEN winner_update';
                 };
                 client.send(JSON.stringify(message));
             }
-            else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by)) {
+            else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
                 getWinnerMember(drawn_by)
                     .then((winnerID)=>{
                     const client = clients.get(winnerID);
