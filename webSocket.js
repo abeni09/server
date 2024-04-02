@@ -67,7 +67,15 @@ function fetchTodaysCandidates(memberId) {
 
                     const drawstartedat = result.rows[0].drawstartedat;
 
-                    const query = 'SELECT lotto_number, id FROM lottonumbers WHERE batch_number = $1 AND winner = $2 AND expired = $3 AND DATE(deposited_at) = DATE($4) ORDER BY RANDOM()';
+                    const query = `
+                    SELECT lottonumbers.lotto_number, lottonumbers.id, members.id FROM lottonumbers 
+                    JOIN members ON lottonumbers.member = members.id
+                    WHERE lottonumbers.batch_number = $1 
+                    AND lottonumbers.winner = $2 
+                    AND lottonumbers.expired = $3 
+                    AND DATE(lottonumbers.deposited_at) = DATE($4) 
+                    AND members.won = false 
+                    ORDER BY RANDOM()`;
                     pool.query(query, [batch, false, false, drawstartedat], (err, result) => {
                         if (err) {
                             reject(err);
@@ -196,6 +204,7 @@ const queryNewWinner = 'LISTEN winner_update';
         try {
             console.log(notification.payload);
             const payload = JSON.parse(notification.payload);
+            console.log(clients);
             console.log('Received notification:', payload);
             const {table_name, operation, drawn_by, newData} = payload
 
@@ -209,8 +218,6 @@ const queryNewWinner = 'LISTEN winner_update';
                     .then((candidates) => {
                         // Construct the message object including table name, operation, and new data
                         const message = {
-                            table: table_name,
-                            operation: operation,
                             data: newData,
                             candidates: candidates
                         };
@@ -225,8 +232,6 @@ const queryNewWinner = 'LISTEN winner_update';
                 console.log(`Sending draw countdown data to client ${drawn_by}`);
                 
                 const message = {
-                    table: table_name,
-                    operation: operation,
                     data: newData
                 };
                 client.send(JSON.stringify(message));
@@ -238,9 +243,8 @@ const queryNewWinner = 'LISTEN winner_update';
                     console.log(`Sending winner data to client ${winnerID}`);
                     // Construct the message object including table name and new data
                     const message = {
-                        table: table_name,
-                        operation: operation,
-                        data: newData
+                        data: newData,
+                        winner: winnerID
                     };
                     client.send(JSON.stringify(message));
                     })

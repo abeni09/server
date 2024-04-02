@@ -689,22 +689,20 @@ async function createTriggers() {
           
           -- Convert the countdown value from minutes to seconds
           NEW.countdown := NEW.countdown * 60;
+          -- Pause for 1 second
+          PERFORM pg_sleep(1);
           
-          -- Loop to update the countdown every second until it reaches 0
-          WHILE NEW.countdown > 0 LOOP
-              -- Pause for 1 second
-              PERFORM pg_sleep(1);
-              
-              -- Decrement the countdown value by 1 second
-              NEW.countdown := NEW.countdown - 1;
-              
-              -- If countdown reaches 0, set drawStarted to false
-              IF NEW.countdown <= 0 THEN
-                  NEW.countdown := 0;
-                  NEW.drawstarted := false;
-                  EXIT;
-              END IF;
-          END LOOP;
+          -- Decrement the countdown value by 1 second
+          UPDATE sitesettings
+          SET countdown = NEW.countdown - INTERVAL '1 second'
+          WHERE id = NEW.id; -- Assuming id is the primary key of the draw table
+          -- NEW.countdown := NEW.countdown - 1;
+          
+          -- If countdown reaches 0, set drawStarted to false
+          IF NEW.countdown <= 0 THEN
+              NEW.countdown := 0;
+              NEW.drawstarted := false;
+          END IF;
       ELSE
           -- Reset countdown if draw is not started
           NEW.countdown := NULL;
@@ -717,7 +715,7 @@ async function createTriggers() {
   CREATE OR REPLACE TRIGGER update_countdown_trigger
   BEFORE UPDATE ON sitesettings
   FOR EACH ROW
-  WHEN (OLD.drawstarted IS DISTINCT FROM NEW.drawstarted)
+  WHEN (OLD.countdown IS DISTINCT FROM NEW.countdown)
   EXECUTE FUNCTION update_countdown_trigger_function();
   `
   const drawerSelectedTriggerQuery = `
@@ -911,13 +909,13 @@ async function createTriggers() {
     // .catch((error) => {
     //     console.error("Error creating trigger draw started:", error);
     // });
-    // await pool.query(countdownTriggerQuery)
-    // .then(() => {
-    //     console.log("Countdown trigger created successfully");
-    // })
-    // .catch((error) => {
-    //     console.error("Error creating trigger countdown:", error);
-    // });
+    await pool.query(countdownTriggerQuery)
+    .then(() => {
+        console.log("Countdown trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger countdown:", error);
+    });
     // await pool.query(drawerSelectedTriggerQuery)
     // .then(() => {
     //     console.log("Drawer Selected trigger created successfully");
