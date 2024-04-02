@@ -207,7 +207,10 @@ const queryNewWinner = 'LISTEN winner_update';
             console.log('Received notification:', payload);
             const {table_name, operation, drawn_by, newData} = payload
             console.log(clients.has(drawn_by));
-            console.log(clients.keys);
+            console.log(clients.forEach(element => {
+                console.log(element);
+                
+            }));
 
 //         // Check if the notification is for an INSERT operation on the "draw" table
             if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by)) {
