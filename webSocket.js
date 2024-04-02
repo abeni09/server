@@ -212,7 +212,7 @@ const queryNewWinner = 'LISTEN winner_update';
 
 //         // Check if the notification is for an INSERT operation on the "draw" table
             if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
-                const client = clients.get(drawn_by);
+                const client = clients.get(drawn_by.toString());
                 console.log(`Sending draw data to client ${drawn_by}`);
                 
                 // Fetch today's candidates
@@ -230,7 +230,7 @@ const queryNewWinner = 'LISTEN winner_update';
                     });
             }
             else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by.toString())) {
-                const client = clients.get(drawn_by);
+                const client = clients.get(drawn_by.toString());
                 console.log(`Sending draw countdown data to client ${drawn_by}`);
                 
                 const message = {
@@ -241,7 +241,7 @@ const queryNewWinner = 'LISTEN winner_update';
             else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
                 getWinnerMember(drawn_by)
                     .then((winnerID)=>{
-                    const client = clients.get(winnerID);
+                    const client = clients.get(winnerID.toString());
                     console.log(`Sending winner data to client ${winnerID}`);
                     // Construct the message object including table name and new data
                     const message = {
