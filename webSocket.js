@@ -20,9 +20,25 @@ wss.on('connection', (ws, request) => {
     
     // Close previous connection if it exists
     if (clients.has(clientId)) {
-        console.log(`Closing previous connection for client ${clientId}`);
-        clients.get(clientId).close();
-        clients.delete(clientId); // Remove client from the map
+        // console.log(`Closing previous connection for client ${clientId}`);
+        // clients.get(clientId).close();
+        // clients.delete(clientId); // Remove client from the map
+        
+        const existingClient = clients.get(clientId);
+
+        // Compare client IPs to determine if they are from different devices
+        const existingClientIP = existingClient._socket.remoteAddress;
+        const newClientIP = ws._socket.remoteAddress;
+
+        if (existingClientIP !== newClientIP) {
+            console.log(`Closing previous connection for client ${clientId} from ${newClientIP}`);
+            existingClient.close();// Remove previous client from the map
+        } else {
+            console.log(`Client ${clientId} reconnected from the same device`);
+            // Close the newly established connection
+            ws.close();
+            return;
+        }
     }
     
     clients.set(clientId, ws); // Store client with its ID
