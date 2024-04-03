@@ -1428,8 +1428,8 @@ app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
 
 app.post('/stopSpinner', async (req, res) => {
   try {
-    const { drawnBy, deposit, winnerMember } = req.body;
-    if (!drawnBy || !deposit || !winnerMember) {
+    const { drawnBy, drawID, winnerMember, winnerLotto } = req.body;
+    if (!drawnBy || !deposit || !winnerMember || !winnerLotto) {
       return res.status(400).json({message:'Request body is missing'})
     }
     const userId = req.user.userId
@@ -1444,9 +1444,21 @@ app.post('/stopSpinner', async (req, res) => {
         FROM Draw 
         WHERE id = $1 AND drawn_by = $2 AND used = false AND timer > 0
       `;
-      const checkResult = await pool.query(checkQuery, [deposit, drawnBy]);
+      const checkResult = await pool.query(checkQuery, [drawID, drawnBy]);
   
-      if (checkResult.rows.length === 0) {
+      const checkMembers = await pool.query('select * from members where id = $1 and won = false', [parseInt(winnerMember)])
+      const member = checkMembers.rows[0]
+
+      const checkLottoNumber = await pool.query('select id from lottonumbers where lotto_number = $1 and member = $2 and won = false', [winnerLotto, parseInt(winnerMember)])
+      const lottonumber = checkLottoNumber.rows[0]
+
+      if (lottonumber.rowCount === 0) {
+        return res.status(400).json({ message: 'Lotto Number not found!' });
+      }
+      if (member.rowCount === 0) {
+        return res.status(400).json({ message: 'This member has already won!' });
+      }
+      if (checkResult.rowCount === 0) {
         return res.status(400).json({ message: 'Conditions not met for stopping spinner' });
       }
   
@@ -1460,10 +1472,10 @@ app.post('/stopSpinner', async (req, res) => {
   
       // Step 3: Insert a row in the winners table
       const insertQuery = `
-        INSERT INTO winners (member_name, deposit_id)
-        VALUES ($1, $2)
+        INSERT INTO winners (draw_id, lotto_number, won_amount, won_at, batch_number)
+        VALUES ($1, $2, $3, NOW(), $4)
       `;
-      await pool.query(insertQuery, [winnerMember, deposit]);
+      await pool.query(insertQuery, [deposit, lottonumber.id, member.winamount, , member.batch_number]);
   
       res.status(200).json({ message: 'Spinner stopped successfully' });
     }
