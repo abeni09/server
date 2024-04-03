@@ -1478,7 +1478,7 @@ app.post('/stopSpinner', async (req, res) => {
         INSERT INTO winners (draw_id, lotto_number, won_amount, won_at, batch_number)
         VALUES ($1, $2, $3, NOW(), $4)
       `;
-      await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, , member.batch_number]);
+      await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, member.batch_number]);
       console.log('Spinner stopped successfully');
       res.status(200).json({ message: 'Spinner stopped successfully' });
     }
