@@ -32,11 +32,12 @@ wss.on('connection', (ws, request) => {
 
         if (existingClientIP !== newClientIP) {
             console.log(`Closing previous connection for client ${clientId} from ${newClientIP}`);
-            existingClient.close();// Remove previous client from the map
+            existingClient.close();
+            clients.delete(clientId); // Remove previous client from the map
         } else {
             console.log(`Client ${clientId} reconnected from the same device`);
             // Close the newly established connection
-            ws.close();
+            // ws.close();
             return;
         }
     }
