@@ -1429,7 +1429,7 @@ app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
 app.post('/stopSpinner', async (req, res) => {
   try {
     const { drawnBy, drawID, winnerMember, winnerLotto } = req.body;
-    if (!drawnBy || !deposit || !winnerMember || !winnerLotto) {
+    if (!drawnBy || !drawID || !winnerMember || !winnerLotto) {
       return res.status(400).json({message:'Request body is missing'})
     }
     const userId = req.user.userId
@@ -1468,14 +1468,14 @@ app.post('/stopSpinner', async (req, res) => {
         SET used = true
         WHERE id = $1
       `;
-      await pool.query(updateQuery, [deposit]);
+      await pool.query(updateQuery, [drawID]);
   
       // Step 3: Insert a row in the winners table
       const insertQuery = `
         INSERT INTO winners (draw_id, lotto_number, won_amount, won_at, batch_number)
         VALUES ($1, $2, $3, NOW(), $4)
       `;
-      await pool.query(insertQuery, [deposit, lottonumber.id, member.winamount, , member.batch_number]);
+      await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, , member.batch_number]);
   
       res.status(200).json({ message: 'Spinner stopped successfully' });
     }
