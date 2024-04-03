@@ -1453,13 +1453,16 @@ app.post('/stopSpinner', async (req, res) => {
       const lottonumber = checkLottoNumber.rows[0]
 
       if (lottonumber.rowCount === 0) {
+        console.log('Lotto Number not found!' );
         return res.status(400).json({ message: 'Lotto Number not found!' });
       }
       if (member.rowCount === 0) {
+        console.log('This member has already won!');
         return res.status(400).json({ message: 'This member has already won!' });
       }
       if (checkResult.rowCount === 0) {
-        return res.status(400).json({ message: 'Conditions not met for stopping spinner' });
+        console.log('Conditions not met for stopping spinner');
+        return res.status(400).json({ message: 'Draw data not valid!' });
       }
   
       // Step 2: Update the row's used value to true
@@ -1476,7 +1479,7 @@ app.post('/stopSpinner', async (req, res) => {
         VALUES ($1, $2, $3, NOW(), $4)
       `;
       await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, , member.batch_number]);
-  
+      console.log('Spinner stopped successfully');
       res.status(200).json({ message: 'Spinner stopped successfully' });
     }
     else{
