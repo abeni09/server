@@ -894,6 +894,57 @@ async function createTriggers() {
   FOR EACH ROW
   EXECUTE FUNCTION notify_new_winner_row();
   `
+  const updateWinnerMemberWonQuery = `
+  CREATE OR REPLACE FUNCTION process_winner()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      -- Get the lotto_number value from the NEW row inserted into the winners table
+      DECLARE
+          lotto_number_value INTEGER;
+          member_id_value INTEGER;
+      BEGIN
+          lotto_number_value := NEW.lotto_number;
+          
+          -- Retrieve the member_id using lotto_number from the lottonumbers table
+          SELECT member_id INTO member_id_value
+          FROM lottonumbers
+          WHERE lotto_number = lotto_number_value;
+          
+          -- Update the corresponding member's won value to true in the members table
+          UPDATE members
+          SET won = TRUE, won_at = NOW()
+          WHERE member_id = member_id_value;
+          
+          RETURN NEW;
+      END;
+  END;
+  $$ LANGUAGE plpgsql;
+  `
+  const updateLottoNumbersAfterWinnerQuery = `-- Create or replace the trigger function
+  CREATE OR REPLACE FUNCTION update_lottonumbers()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      -- Update the expired value for all rows in lottonumbers except the winner lotto_number
+      UPDATE lottonumbers
+      SET expired = true
+      WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
+      AND lotto_number <> NEW.lotto_number;
+  
+      -- Set the winner value to true for the winner's row
+      UPDATE lottonumbers
+      SET winner = true
+      WHERE lotto_number = NEW.lotto_number;
+  
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  -- Create the trigger
+  CREATE TRIGGER update_lottonumbers_trigger
+  AFTER INSERT ON winners
+  FOR EACH ROW
+  EXECUTE FUNCTION update_lottonumbers();
+  `
   try {
     await pool.query(checkDrawStartedTriggerQuery)
     .then(() => {
@@ -943,6 +994,20 @@ async function createTriggers() {
     })
     .catch((error) => {
         console.error("Error creating trigger New Winner:", error);
+    });
+    await pool.query(updateWinnerMemberWonQuery)
+    .then(() => {
+        console.log("Winner member won value trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger Updater member:", error);
+    });
+    await pool.query(updateLottoNumbersAfterWinnerQuery)
+    .then(() => {
+        console.log("Lotto number expired value trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger Lotto number updater:", error);
     });
     
   } catch (error) {
