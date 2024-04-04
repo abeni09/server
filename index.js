@@ -451,7 +451,7 @@ async function createFunctionsForTriggers(){
             'lotto_number', NEW.lotto_number,
             'draw_id', NEW.draw_id,
             'won_amount', NEW.won_amount,
-            'won_at', NEW.won_at,
+            'win_at', NEW.win_at,
             'batch_number', NEW.batch_number
           )
         )::text
@@ -491,7 +491,7 @@ async function createFunctionsForTriggers(){
             
             -- Update the corresponding member's won value to true in the members table
             UPDATE members
-            SET won = TRUE, won_at = NOW()
+            SET won = TRUE, wonat = NOW()
             WHERE member_id = member_id_value;
             
             RETURN NEW;
@@ -1493,7 +1493,7 @@ async function createTriggers() {
           'lotto_number', NEW.lotto_number,
           'draw_id', NEW.draw_id,
           'won_amount', NEW.won_amount,
-          'won_at', NEW.won_at,
+          'win_at', NEW.win_at,
           'batch_number', NEW.batch_number
         )
       )::text
@@ -1525,7 +1525,7 @@ async function createTriggers() {
           
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
-          SET won = TRUE, won_at = NOW()
+          SET won = TRUE, wonat = NOW()
           WHERE member_id = member_id_value;
           
           RETURN NEW;
