@@ -491,7 +491,7 @@ async function createFunctionsForTriggers(){
             
             -- Update the corresponding member's won value to true in the members table
             UPDATE members
-            SET won = TRUE, wonat = NOW()
+            SET won = TRUE, wonAt = NOW()
             WHERE member_id = member_id_value;
             
             RETURN NEW;
@@ -1525,7 +1525,7 @@ async function createTriggers() {
           
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
-          SET won = TRUE, wonat = (SELECT drawstartedat FROM sitesettings)
+          SET won = TRUE, wonAt = (SELECT drawstartedat FROM sitesettings)
           WHERE id = member_id_value;
           
           RETURN NEW;
