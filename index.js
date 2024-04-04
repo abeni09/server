@@ -208,10 +208,11 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
       `SELECT * FROM members 
       WHERE batch_number = $1 
       AND isonline = true 
-      -- AND won = false 
       AND id NOT IN (
         SELECT drawn_by FROM Draw WHERE batch_number = $1
-        AND DATE(draw_date) = CURRENT_DATE
+        AND DATE(draw_date) = (
+            SELECT DATE(drawstartedat) FROM sitesettings
+        )
       ) 
       ORDER BY RANDOM() 
       LIMIT 1`,
