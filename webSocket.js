@@ -1,11 +1,16 @@
 const WebSocket = require('ws');
+require('dotenv').config();
+const dbName = process.env.DATABASE;
+const userName = process.env.USER;
+const hostName = process.env.HOST;
+const password = process.env.PASSWORD;s
 const { Pool } = require('pg');
 
 const pool = new Pool({
-    user: 'derash_admin',
-    host: '78.46.175.135',
-    database: 'derashdb',
-    password: 'UrFCr7meM7rUJxxCrELt',
+    user: userName,
+    host: hostName,
+    database: dbName,
+    password: password,
     port: 5432,
 });
 const wss = new WebSocket.Server({ port: 8080 });

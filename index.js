@@ -1,5 +1,10 @@
 // Import required modules
 const express = require('express');
+require('dotenv').config();
+const dbName = process.env.DATABASE;
+const userName = process.env.USER;
+const hostName = process.env.HOST;
+const password = process.env.PASSWORD;
 const { Pool } = require('pg');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -108,10 +113,10 @@ const pool = new Pool({
     //   ca: fs.readFileSync('certs/ca.crt')
     // },
     // ssl: true,
-    user: 'derash_admin',
-    host: '78.46.175.135',
-    database: 'derashdb',
-    password: 'UrFCr7meM7rUJxxCrELt',
+    user: userName,
+    host: hostName,
+    database: dbName,
+    password: password,
     port: 5432,
 });
 // Define a function to drop a single table
