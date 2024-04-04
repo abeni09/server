@@ -109,24 +109,11 @@ const pool = new Pool({
     // },
     // ssl: true,
     user: 'derash_admin',
-    // host: 'dpg-cnq1fr0l5elc73d04rqg-a.oregon-postgres.render.com',
     host: '78.46.175.135',
     database: 'derashdb',
-    // password: 'XiLmYBfon89WBlMSavtGufFw3UtxorYP',
     password: 'UrFCr7meM7rUJxxCrELt',
     port: 5432,
 });
-// // PostgreSQL database configuration
-// const pool = new Pool({
-//     ssl: true, // Whether to use SSL/TLS for the connection
-//     user: 'derash_admin',
-//     // host: 'dpg-cnq1fr0l5elc73d04rqg-a.oregon-postgres.render.com',
-//     host: 'dpg-cnt66mg21fec73f8iq70-a.oregon-postgres.render.com',
-//     database: 'derashdb',
-//     // password: 'XiLmYBfon89WBlMSavtGufFw3UtxorYP',
-//     password: '8HNUfz7zyPWZ944nh7mIpSjurtMLbxdm',
-//     port: 5432,
-// });
 // Define a function to drop a single table
 async function dropTable(tableName) {
     try {
@@ -210,7 +197,8 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
     const drawerQuery = await pool.query(
       `SELECT * FROM members 
       WHERE batch_number = $1 
-      AND isOnline = true 
+      AND isonline = true 
+      -- AND won = false 
       AND id NOT IN (
         SELECT drawn_by FROM Draw WHERE batch_number = $1
         AND DATE(draw_date) = CURRENT_DATE
@@ -331,7 +319,591 @@ function startTimerListener(drawId, member_spin_timeout) {
     }
   }, 1000); // Interval of 1 second
 }
+async function createFunctionsForTriggers(){
+  pool.query(`
+  -- FUNCTION: public.check_draw_started()
 
+  -- DROP FUNCTION IF EXISTS public.check_draw_started();
+  
+  CREATE OR REPLACE FUNCTION public.check_draw_started()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM sitesettings WHERE drawstarted = true) THEN
+            RAISE EXCEPTION 'Draw has not started. Cannot insert into Draw table.';
+        END IF;
+        RETURN NEW;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.check_draw_started()
+      OWNER TO derash_admin;
+  `)
+  pool.query(`
+  -- FUNCTION: public.notify_new_draw_row()
+
+  -- DROP FUNCTION IF EXISTS public.notify_new_draw_row();
+  
+  CREATE OR REPLACE FUNCTION public.notify_new_draw_row()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+      -- Emit a notification on the 'draw_insert' channel
+      PERFORM pg_notify('draw_insert', 
+        json_build_object(
+          'table_name', 'draw',
+          'operation', 'INSERT',
+          'drawn_by', NEW.drawn_by,
+          'newData', json_build_object(
+            'id', NEW.id,
+            'drawn_at', NEW.drawn_at,
+            'draw_date', NEW.draw_date,
+            'timer', NEW.timer,
+            'used', NEW.used,
+            'batch_number', NEW.batch_number
+          )
+        )::text
+      );
+      RETURN NEW;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.notify_new_draw_row()
+      OWNER TO derash_admin;
+  
+  `)
+  pool.query(`
+  -- FUNCTION: public.notify_update_draw_row()
+
+  -- DROP FUNCTION IF EXISTS public.notify_update_draw_row();
+  
+  CREATE OR REPLACE FUNCTION public.notify_update_draw_row()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+      -- Emit a notification on the 'draw_update' channel
+      PERFORM pg_notify('draw_update', 
+        json_build_object(
+          'table_name', 'draw',
+          'operation', 'UPDATE',
+          'drawn_by', NEW.drawn_by,
+          'newData', json_build_object(
+            'timer', NEW.timer,
+            'used', NEW.used
+          )
+        )::text
+      );
+      RETURN NEW;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.notify_update_draw_row()
+      OWNER TO derash_admin;
+  
+  `)
+  pool.query(`
+  -- FUNCTION: public.notify_new_winner_row()
+
+  -- DROP FUNCTION IF EXISTS public.notify_new_winner_row();
+  
+  CREATE OR REPLACE FUNCTION public.notify_new_winner_row()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+      -- Emit a notification on the 'winner_insert' channel
+      PERFORM pg_notify('winner_insert', 
+        json_build_object(
+          'table_name', 'winners',
+          'operation', 'INSERT',
+          'drawn_by', NEW.lotto_number,
+          'newData', json_build_object(
+            'id', NEW.id,
+            'lotto_number', NEW.lotto_number,
+            'draw_id', NEW.draw_id,
+            'won_amount', NEW.won_amount,
+            'won_at', NEW.won_at,
+            'batch_number', NEW.batch_number
+          )
+        )::text
+      );
+      RETURN NEW;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.notify_new_winner_row()
+      OWNER TO derash_admin;
+  
+  `)
+  pool.query(`
+  -- FUNCTION: public.process_winner()
+
+  -- DROP FUNCTION IF EXISTS public.process_winner();
+  
+  CREATE OR REPLACE FUNCTION public.process_winner()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+        -- Get the lotto_number value from the NEW row inserted into the winners table
+        DECLARE
+            lotto_number_value INTEGER;
+            member_id_value INTEGER;
+        BEGIN
+            lotto_number_value := NEW.lotto_number;
+            
+            -- Retrieve the member_id using lotto_number from the lottonumbers table
+            SELECT member_id INTO member_id_value
+            FROM lottonumbers
+            WHERE lotto_number = lotto_number_value;
+            
+            -- Update the corresponding member's won value to true in the members table
+            UPDATE members
+            SET won = TRUE, won_at = NOW()
+            WHERE member_id = member_id_value;
+            
+            RETURN NEW;
+        END;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.process_winner()
+      OWNER TO derash_admin;
+  
+  `)
+  pool.query(`
+  -- FUNCTION: public.update_lottonumbers()
+
+  -- DROP FUNCTION IF EXISTS public.update_lottonumbers();
+  
+  CREATE OR REPLACE FUNCTION public.update_lottonumbers()
+      RETURNS trigger
+      LANGUAGE 'plpgsql'
+      COST 100
+      VOLATILE NOT LEAKPROOF
+  AS $BODY$
+    BEGIN
+        -- Update the expired value for all rows in lottonumbers except the winner lotto_number
+        UPDATE lottonumbers
+        SET expired = true
+        WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
+        AND lotto_number <> NEW.lotto_number;
+    
+        -- Set the winner value to true for the winner's row
+        UPDATE lottonumbers
+        SET winner = true
+        WHERE lotto_number = NEW.lotto_number;
+    
+        RETURN NEW;
+    END;
+    
+  $BODY$;
+  
+  ALTER FUNCTION public.update_lottonumbers()
+      OWNER TO derash_admin;
+  
+  `)
+}
+async function createTablesWithTriggers(){
+  try {
+    pool.query(`
+    -- Table: public.winners
+
+    -- DROP TABLE IF EXISTS public.winners;
+    
+    CREATE TABLE IF NOT EXISTS public.winners
+    (
+        id integer NOT NULL DEFAULT nextval('winners_id_seq'::regclass),
+        draw_id integer NOT NULL,
+        lotto_number integer NOT NULL,
+        won_amount numeric(10,2) NOT NULL,
+        win_at timestamp with time zone NOT NULL,
+        batch_number integer NOT NULL,
+        CONSTRAINT winners_pkey PRIMARY KEY (id),
+        CONSTRAINT winners_draw_id_draw_id1_key UNIQUE (draw_id)
+            INCLUDE(draw_id),
+        CONSTRAINT winners_lotto_number_lotto_number1_key UNIQUE (lotto_number)
+            INCLUDE(lotto_number),
+        CONSTRAINT winners_lotto_number_fkey FOREIGN KEY (lotto_number)
+            REFERENCES public.lottonumbers (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.winners
+        OWNER to derash_admin;
+    
+    -- Trigger: new_winner_row_trigger
+    
+    -- DROP TRIGGER IF EXISTS new_winner_row_trigger ON public.winners;
+    
+    CREATE OR REPLACE TRIGGER new_winner_row_trigger
+        AFTER INSERT
+        ON public.winners
+        FOR EACH ROW
+        EXECUTE FUNCTION public.notify_new_winner_row();
+    
+    -- Trigger: update_lottonumbers_trigger
+    
+    -- DROP TRIGGER IF EXISTS update_lottonumbers_trigger ON public.winners;
+    
+    CREATE OR REPLACE TRIGGER update_lottonumbers_trigger
+        AFTER INSERT
+        ON public.winners
+        FOR EACH ROW
+        EXECUTE FUNCTION public.update_lottonumbers();
+    `)
+    pool.query(`
+    -- Table: public.users
+
+    -- DROP TABLE IF EXISTS public.users;
+    
+    CREATE TABLE IF NOT EXISTS public.users
+    (
+        id integer NOT NULL DEFAULT nextval('users_id_seq'::regclass),
+        email character varying(100) COLLATE pg_catalog."default",
+        phone character varying(20) COLLATE pg_catalog."default" NOT NULL,
+        name character varying(100) COLLATE pg_catalog."default" NOT NULL,
+        role character varying(50) COLLATE pg_catalog."default" NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        created_by integer NOT NULL,
+        updated_at timestamp with time zone,
+        updated_by integer,
+        password character varying(255) COLLATE pg_catalog."default",
+        CONSTRAINT users_pkey PRIMARY KEY (id),
+        CONSTRAINT uniqe_phone UNIQUE (phone)
+            INCLUDE(phone),
+        CONSTRAINT users_email_email1_key UNIQUE (email)
+            INCLUDE(email)
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.users
+        OWNER to derash_admin;
+    
+    `)
+    pool.query(`
+    -- Table: public.sitesettings
+
+    -- DROP TABLE IF EXISTS public.sitesettings;
+    
+    CREATE TABLE IF NOT EXISTS public.sitesettings
+    (
+        id integer NOT NULL DEFAULT nextval('sitesettings_id_seq'::regclass),
+        updated_at timestamp with time zone,
+        updated_by integer,
+        deposit_contribution_after numeric(10,2) NOT NULL,
+        deposit_contribution_before numeric(10,2) NOT NULL,
+        daily_number_of_winners integer NOT NULL,
+        drawendedat timestamp with time zone,
+        drawstartedat timestamp with time zone,
+        drawstarted boolean NOT NULL,
+        draw_timeout integer NOT NULL,
+        daily_win_amount numeric(10,2) NOT NULL,
+        image_url character varying(255) COLLATE pg_catalog."default",
+        max_deposit_days integer NOT NULL,
+        max_days_to_penalize integer NOT NULL,
+        max_days_to_wait integer NOT NULL,
+        min_deposit_days integer NOT NULL,
+        member_spin_timeout integer NOT NULL,
+        batch_amount integer NOT NULL,
+        service_fee numeric(10,2) NOT NULL,
+        penality_fee numeric(10,2) NOT NULL,
+        maximum_members integer NOT NULL,
+        site_name character varying(100) COLLATE pg_catalog."default" NOT NULL,
+        server_url character varying(255) COLLATE pg_catalog."default" NOT NULL,
+        about_us character varying(255) COLLATE pg_catalog."default",
+        copy_right_content character varying(255) COLLATE pg_catalog."default",
+        systemstartedat timestamp with time zone,
+        countdown integer,
+        CONSTRAINT sitesettings_pkey PRIMARY KEY (id),
+        CONSTRAINT sitesettings_updated_by_fkey FOREIGN KEY (updated_by)
+            REFERENCES public.users (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.sitesettings
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.servicefee
+
+    -- DROP TABLE IF EXISTS public.servicefee;
+    
+    CREATE TABLE IF NOT EXISTS public.servicefee
+    (
+        id integer NOT NULL DEFAULT nextval('servicefee_id_seq'::regclass),
+        member integer NOT NULL,
+        deposit integer NOT NULL,
+        amount numeric(10,2) NOT NULL,
+        date timestamp with time zone NOT NULL,
+        CONSTRAINT servicefee_pkey PRIMARY KEY (id),
+        CONSTRAINT servicefee_deposit_fkey FOREIGN KEY (deposit)
+            REFERENCES public.deposit (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION,
+        CONSTRAINT servicefee_member_fkey FOREIGN KEY (member)
+            REFERENCES public.members (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.servicefee
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.penalityfee
+
+    -- DROP TABLE IF EXISTS public.penalityfee;
+    
+    CREATE TABLE IF NOT EXISTS public.penalityfee
+    (
+        id integer NOT NULL DEFAULT nextval('penalityfee_id_seq'::regclass),
+        date character varying(255) COLLATE pg_catalog."default" NOT NULL,
+        days integer NOT NULL,
+        member integer NOT NULL,
+        deposit integer NOT NULL,
+        amount numeric(10,2) NOT NULL,
+        CONSTRAINT penalityfee_pkey PRIMARY KEY (id),
+        CONSTRAINT penalityfee_deposit_fkey FOREIGN KEY (deposit)
+            REFERENCES public.deposit (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION,
+        CONSTRAINT penalityfee_member_fkey FOREIGN KEY (member)
+            REFERENCES public.members (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.penalityfee
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.members
+
+    -- DROP TABLE IF EXISTS public.members;
+    
+    CREATE TABLE IF NOT EXISTS public.members
+    (
+        id integer NOT NULL DEFAULT nextval('members_id_seq'::regclass),
+        name character varying(100) COLLATE pg_catalog."default" NOT NULL,
+        age integer NOT NULL,
+        gender character varying(10) COLLATE pg_catalog."default" NOT NULL,
+        phone character varying(20) COLLATE pg_catalog."default" NOT NULL,
+        firstdepositdate timestamp with time zone,
+        isonline boolean NOT NULL,
+        isbanned boolean NOT NULL,
+        batch_number integer NOT NULL,
+        winamount numeric(10,2),
+        won boolean NOT NULL,
+        city character varying(20) COLLATE pg_catalog."default",
+        subcity character varying(20) COLLATE pg_catalog."default",
+        woreda character varying(10) COLLATE pg_catalog."default",
+        house_number character varying(10) COLLATE pg_catalog."default",
+        respondent_name character varying(100) COLLATE pg_catalog."default",
+        respondent_phone character varying(20) COLLATE pg_catalog."default",
+        respondent_relation character varying(20) COLLATE pg_catalog."default",
+        heir_name character varying(100) COLLATE pg_catalog."default",
+        heir_phone character varying(20) COLLATE pg_catalog."default",
+        heir_relation character varying(20) COLLATE pg_catalog."default",
+        password character varying(255) COLLATE pg_catalog."default",
+        id_front character varying(255) COLLATE pg_catalog."default",
+        id_back character varying(255) COLLATE pg_catalog."default",
+        profile_pic character varying(255) COLLATE pg_catalog."default",
+        "addedBy" integer,
+        "updatedBy" integer,
+        "addedAt" timestamp with time zone,
+        "updatedAt" timestamp with time zone,
+        "wonAt" timestamp with time zone,
+        lastdate timestamp with time zone,
+        CONSTRAINT members_pkey PRIMARY KEY (id),
+        CONSTRAINT unique_phone UNIQUE (phone)
+            INCLUDE(phone),
+        CONSTRAINT "members_addedBy_fkey" FOREIGN KEY ("addedBy")
+            REFERENCES public.users (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+            NOT VALID
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.members
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.lottosetting
+
+    -- DROP TABLE IF EXISTS public.lottosetting;
+    
+    CREATE TABLE IF NOT EXISTS public.lottosetting
+    (
+        id integer NOT NULL DEFAULT nextval('lottosetting_id_seq'::regclass),
+        batch_number integer NOT NULL,
+        current_lotto_number character varying(200) COLLATE pg_catalog."default" NOT NULL,
+        updated_at timestamp without time zone NOT NULL,
+        CONSTRAINT lottosetting_pkey PRIMARY KEY (id)
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.lottosetting
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.lottonumbers
+
+    -- DROP TABLE IF EXISTS public.lottonumbers;
+    
+    CREATE TABLE IF NOT EXISTS public.lottonumbers
+    (
+        id integer NOT NULL DEFAULT nextval('lottonumbers_id_seq'::regclass),
+        lotto_number character varying(50) COLLATE pg_catalog."default" NOT NULL,
+        daily_contributed_amount numeric(10,2) NOT NULL,
+        deposit integer NOT NULL,
+        member integer NOT NULL,
+        batch_number integer NOT NULL,
+        winner boolean NOT NULL,
+        expired boolean NOT NULL,
+        deposited_at timestamp with time zone NOT NULL,
+        CONSTRAINT lottonumbers_pkey PRIMARY KEY (id),
+        CONSTRAINT lottonumbers_deposit_fkey FOREIGN KEY (deposit)
+            REFERENCES public.deposit (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION,
+        CONSTRAINT lottonumbers_member_fkey FOREIGN KEY (member)
+            REFERENCES public.members (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.lottonumbers
+        OWNER to derash_admin;
+    `)
+    pool.query(`
+    -- Table: public.draw
+
+    -- DROP TABLE IF EXISTS public.draw;
+    
+    CREATE TABLE IF NOT EXISTS public.draw
+    (
+        id integer NOT NULL DEFAULT nextval('draw_id_seq'::regclass),
+        drawn_at timestamp without time zone NOT NULL,
+        draw_date timestamp without time zone NOT NULL,
+        drawn_by integer NOT NULL,
+        timer integer NOT NULL,
+        used boolean NOT NULL,
+        batch_number integer NOT NULL,
+        referer_draw integer,
+        CONSTRAINT draw_pkey PRIMARY KEY (id),
+        CONSTRAINT draw_referer_draw_referer_draw1_key UNIQUE (referer_draw)
+            INCLUDE(referer_draw),
+        CONSTRAINT draw_drawn_by_fkey FOREIGN KEY (drawn_by)
+            REFERENCES public.members (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.draw
+        OWNER to derash_admin;
+    
+    -- Trigger: enforce_draw_started
+    
+    -- DROP TRIGGER IF EXISTS enforce_draw_started ON public.draw;
+    
+    CREATE OR REPLACE TRIGGER enforce_draw_started
+        BEFORE INSERT OR UPDATE 
+        ON public.draw
+        FOR EACH ROW
+        EXECUTE FUNCTION public.check_draw_started();
+    
+    -- Trigger: new_draw_row_trigger
+    
+    -- DROP TRIGGER IF EXISTS new_draw_row_trigger ON public.draw;
+    
+    CREATE OR REPLACE TRIGGER new_draw_row_trigger
+        AFTER INSERT
+        ON public.draw
+        FOR EACH ROW
+        EXECUTE FUNCTION public.notify_new_draw_row();
+    
+    -- Trigger: update_draw_row_trigger
+    
+    -- DROP TRIGGER IF EXISTS update_draw_row_trigger ON public.draw;
+    
+    CREATE OR REPLACE TRIGGER update_draw_row_trigger
+        BEFORE UPDATE 
+        ON public.draw
+        FOR EACH ROW
+        WHEN (old.timer IS DISTINCT FROM new.timer)
+        EXECUTE FUNCTION public.notify_update_draw_row();
+    `)
+    pool.query(`
+    -- Table: public.deposit
+
+    -- DROP TABLE IF EXISTS public.deposit;
+    
+    CREATE TABLE IF NOT EXISTS public.deposit
+    (
+        id integer NOT NULL DEFAULT nextval('deposit_id_seq'::regclass),
+        deposited_at timestamp without time zone NOT NULL,
+        deposited_by integer NOT NULL,
+        deposited_for integer NOT NULL,
+        amount numeric(10,2) NOT NULL,
+        batch_number integer NOT NULL,
+        source character varying(50) COLLATE pg_catalog."default",
+        CONSTRAINT deposit_pkey PRIMARY KEY (id),
+        CONSTRAINT deposit_deposited_by_fkey FOREIGN KEY (deposited_by)
+            REFERENCES public.users (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION,
+        CONSTRAINT deposit_deposited_for_fkey FOREIGN KEY (deposited_for)
+            REFERENCES public.members (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+    )
+    
+    TABLESPACE pg_default;
+    
+    ALTER TABLE IF EXISTS public.deposit
+        OWNER to derash_admin;
+    `)
+  } catch (error) {
+    console.log(error);
+  }
+}
 
   // Call the function to drop a specific table
 //   dropTable('SiteSettings');
@@ -1178,7 +1750,7 @@ app.get('/fetchWinners', async (req, res) => {
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
       
       const winners = await pool.query(
-        `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+        `SELECT winners.win_at, lottonumbers.lotto_number, members.*
         FROM winners
         JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
         JOIN members ON lottonumbers.member = members.id`);
@@ -1198,11 +1770,11 @@ app.get('/fetchWinners/:batch/:date', async (req, res) => {
   const date = req.params.date;
   try {
     const winnersQuery = await pool.query(
-      `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+      `SELECT winners.win_at, lottonumbers.lotto_number, members.*
        FROM winners
        JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
        JOIN members ON lottonumbers.member = members.id
-       WHERE DATE(winners.won_at) = $1 AND winners.batch_number = $2`,
+       WHERE DATE(winners.win_at) = $1 AND winners.batch_number = $2`,
       [date, batch_number]
     );
     // const winners = winnersQuery.rows;
@@ -1222,7 +1794,7 @@ app.get('/fetchWinners/:batch', async (req, res) => {
   const date = req.params.date;
   try {
     const winnersQuery = await pool.query(
-      `SELECT winners.won_at, lottonumbers.lotto_number, members.*
+      `SELECT winners.win_at, lottonumbers.lotto_number, members.*
        FROM winners
        JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
        JOIN members ON lottonumbers.member = members.id
