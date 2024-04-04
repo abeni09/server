@@ -1452,6 +1452,30 @@ async function createTriggers() {
   WHEN (OLD.timer IS DISTINCT FROM NEW.timer)
   EXECUTE FUNCTION notify_update_draw_row();
   `
+  const notifyChannelOfDrawStopped = `
+  CREATE OR REPLACE FUNCTION notify_draw_ended()
+  RETURNS TRIGGER AS $$
+  BEGIN
+  -- Emit a notification on the 'draw_stopped' channel
+    IF NEW.drawstarted = false THEN
+      PERFORM pg_notify('draw_stopped', 
+        json_build_object(
+          'table_name', 'sitesettings',
+          'operation', 'UPDATE',
+          'draw_started', NEW.drawstarted
+        )::text
+      );
+    END IF;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  CREATE OR REPLACE TRIGGER update_draw_ended_trigger
+  BEFORE UPDATE ON sitesettings
+  FOR EACH ROW
+  WHEN (OLD.drawstarted IS DISTINCT FROM NEW.drawstarted)
+  EXECUTE FUNCTION notify_draw_ended();
+  `
   const notifyChannelOfNewWinnerRow = `
   CREATE OR REPLACE FUNCTION notify_new_winner_row()
   RETURNS TRIGGER AS $$
@@ -1596,6 +1620,13 @@ async function createTriggers() {
     })
     .catch((error) => {
         console.error("Error creating trigger Lotto number updater:", error);
+    });
+    await pool.query(notifyChannelOfDrawStopped)
+    .then(() => {
+        console.log("Draw stopped trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger draw stopped:", error);
     });
     
   } catch (error) {

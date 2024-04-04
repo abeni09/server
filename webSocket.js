@@ -153,9 +153,9 @@ function updateMemberOnlineStatus(memberId, online) {
 }
 
 // Listen for database changes on the specific table
-const queryNewDraw = 'LISTEN draw_insert';
-const queryUpdateDraw = 'LISTEN draw_update';
-const queryNewWinner = 'LISTEN winner_update';
+// const queryNewDraw = 'LISTEN draw_insert';
+// const queryUpdateDraw = 'LISTEN draw_update';
+// const queryNewWinner = 'LISTEN winner_update';
 
 // pool.on('notification', (msg) => {
 //     try {
@@ -228,13 +228,20 @@ const queryNewWinner = 'LISTEN winner_update';
             console.log(notification.payload);
             const payload = JSON.parse(notification.payload);
             console.log('Received notification:', payload);
-            const {table_name, operation, drawn_by, newData} = payload
+            const {table_name, operation, drawn_by, newData, draw_started} = payload
             console.log(drawn_by.toString());
             console.log(`${drawn_by}`);
             console.log(clients.has(`${drawn_by}`));
+            if (draw_started == false) {
+                // Broadcast the draw_stopped message to all connected clients
+                wss.clients.forEach((client) => {
+                    client.send(JSON.stringify({draw_started: false}));
+                });
+                
+            }
 
 //         // Check if the notification is for an INSERT operation on the "draw" table
-            if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
+            else if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
                 const client = clients.get(drawn_by.toString());
                 console.log(`Sending draw data to client ${drawn_by}`);
                 
@@ -287,6 +294,7 @@ const queryNewWinner = 'LISTEN winner_update';
     await client.query('LISTEN draw_insert');
     await client.query('LISTEN draw_update');
     await client.query('LISTEN winner_update');
+    await client.query('LISTEN draw_stopped');
 
     console.log('Listening for PostgreSQL notifications...');
 })();
