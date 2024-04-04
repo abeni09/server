@@ -491,7 +491,7 @@ async function createFunctionsForTriggers(){
             
             -- Update the corresponding member's won value to true in the members table
             UPDATE members
-            SET won = TRUE, wonAt = NOW()
+            SET won = TRUE, won_at = (SELECT drawstartedat FROM sitesettings)
             WHERE member_id = member_id_value;
             
             RETURN NEW;
@@ -757,7 +757,7 @@ async function createTablesWithTriggers(){
         "updatedBy" integer,
         "addedAt" timestamp with time zone,
         "updatedAt" timestamp with time zone,
-        "wonAt" timestamp with time zone,
+        "won_at" timestamp with time zone,
         lastdate timestamp with time zone,
         CONSTRAINT members_pkey PRIMARY KEY (id),
         CONSTRAINT unique_phone UNIQUE (phone)
@@ -1525,7 +1525,7 @@ async function createTriggers() {
           
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
-          SET won = TRUE, wonAt = (SELECT drawstartedat FROM sitesettings)
+          SET won = TRUE, won_at = (SELECT drawstartedat FROM sitesettings)
           WHERE id = member_id_value;
           
           RETURN NEW;
