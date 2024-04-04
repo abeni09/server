@@ -1526,7 +1526,7 @@ async function createTriggers() {
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
           SET won = TRUE, wonat = SELECT drawstartedat FROM sitesettings
-          WHERE member_id = member_id_value;
+          WHERE id = member_id_value;
           
           RETURN NEW;
       END;
@@ -1536,7 +1536,7 @@ async function createTriggers() {
   CREATE OR REPLACE TRIGGER update_member_trigger
   AFTER INSERT ON winners
   FOR EACH ROW
-  EXECUTE FUNCTION update_lottonumbers();
+  EXECUTE FUNCTION process_winner();
   `
   const updateLottoNumbersAfterWinnerQuery = `
   -- Create or replace the trigger function
