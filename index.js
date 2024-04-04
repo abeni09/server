@@ -134,8 +134,11 @@ function startDrawTimer(draw_timeout, server_url) {
   drawTimer = setTimeout(async () => {
     // After the duration, set drawStarted to false
     try {
-      await axios.post(`${server_url}/startDraw`, { drawStarted: false });
+      // await axios.post(`${server_url}/startDraw`, { drawStarted: false });
       // console.log('Draw stopped successfully:', response.data);
+      
+      // Call the PostgreSQL function to stop the draw
+      await pool.query('SELECT stop_draw()');
       console.log('Draw timer expired. drawStarted set to false.');
       stopDrawTimer()
     } catch (error) {
@@ -1578,6 +1581,16 @@ async function createTriggers() {
   FOR EACH ROW
   EXECUTE FUNCTION update_lottonumbers();
   `
+  const stopDrawQuery = `
+  CREATE OR REPLACE FUNCTION stop_draw()
+  RETURNS VOID AS $$
+  BEGIN
+      -- Update drawstarted to false in sitesettings table
+      UPDATE sitesettings
+      SET drawstarted = FALSE;
+  END;
+  $$ LANGUAGE plpgsql;
+  `
   try {
     await pool.query(checkDrawStartedTriggerQuery)
     .then(() => {
@@ -1648,6 +1661,13 @@ async function createTriggers() {
     })
     .catch((error) => {
         console.error("Error creating trigger draw stopped:", error);
+    });
+    await pool.query(stopDrawQuery)
+    .then(() => {
+        console.log("Stop Draw trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger stop draw:", error);
     });
     
   } catch (error) {
