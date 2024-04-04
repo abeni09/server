@@ -232,7 +232,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
           VALUES ($1, $5, $5, $2, false, $3, $4) 
           RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber, refererDraw, Date.parse(drawStartedValue)]
+          [drawer.id, countdownSeconds, batchNumber, refererDraw, drawStartedValue]
         );
         
       } else {
@@ -241,7 +241,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
           VALUES ($1, $4, $4, $2, false, $3) 
           RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber, Date.parse(drawStartedValue)]
+          [drawer.id, countdownSeconds, batchNumber, drawStartedValue]
         );
         
       }
