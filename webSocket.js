@@ -229,8 +229,6 @@ function updateMemberOnlineStatus(memberId, online) {
             const payload = JSON.parse(notification.payload);
             console.log('Received notification:', payload);
             const {table_name, operation, drawn_by, newData, draw_started} = payload
-            console.log(drawn_by.toString());
-            console.log(`${drawn_by}`);
             console.log(clients.has(`${drawn_by}`));
             if (draw_started == false) {
                 // Broadcast the draw_stopped message to all connected clients
