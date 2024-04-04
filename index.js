@@ -404,17 +404,19 @@ async function createFunctionsForTriggers(){
   AS $BODY$
     BEGIN
       -- Emit a notification on the 'draw_update' channel
-      PERFORM pg_notify('draw_update', 
-        json_build_object(
-          'table_name', 'draw',
-          'operation', 'UPDATE',
-          'drawn_by', NEW.drawn_by,
-          'newData', json_build_object(
-            'timer', NEW.timer,
-            'used', NEW.used
-          )
-        )::text
-      );
+      IF NEW.used = true OR NEW.timer = 0 THEN
+        PERFORM pg_notify('draw_update', 
+          json_build_object(
+            'table_name', 'draw',
+            'operation', 'UPDATE',
+            'drawn_by', NEW.drawn_by,
+            'newData', json_build_object(
+              'timer', NEW.timer,
+              'used', NEW.used
+            )
+          )::text
+        );
+      END IF
       RETURN NEW;
     END;
     
@@ -1426,18 +1428,20 @@ async function createTriggers() {
   CREATE OR REPLACE FUNCTION notify_update_draw_row()
   RETURNS TRIGGER AS $$
   BEGIN
-    -- Emit a notification on the 'draw_update' channel
-    PERFORM pg_notify('draw_update', 
-      json_build_object(
-        'table_name', 'draw',
-        'operation', 'UPDATE',
-        'drawn_by', NEW.drawn_by,
-        'newData', json_build_object(
-          'timer', NEW.timer,
-          'used', NEW.used
-        )
-      )::text
-    );
+  -- Emit a notification on the 'draw_update' channel
+    IF NEW.used = true OR NEW.timer = 0 THEN
+      PERFORM pg_notify('draw_update', 
+        json_build_object(
+          'table_name', 'draw',
+          'operation', 'UPDATE',
+          'drawn_by', NEW.drawn_by,
+          'newData', json_build_object(
+            'timer', NEW.timer,
+            'used', NEW.used
+          )
+        )::text
+      );
+    END IF
     RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
