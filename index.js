@@ -1445,32 +1445,19 @@ async function createTriggers() {
     -- Log the values of NEW.timer and NEW.used for debugging
     RAISE NOTICE 'Timer: %, Used: %', NEW.timer, NEW.used;
     -- Emit a notification on the 'draw_update' channel
-    IF NEW.used = 1 THEN
+    IF NEW.used = 1 OR NEW.timer = 0 THEN
       PERFORM pg_notify('draw_update', 
-          json_build_object(
-              'table_name', 'draw',
-              'operation', 'UPDATE',
-              'drawn_by', NEW.drawn_by,
-              'newData', json_build_object(
-                  'timer', NEW.timer,
-                  'used', NEW.used
-              )
-          )::text
+        json_build_object(
+          'table_name', 'draw',
+          'operation', 'UPDATE',
+          'drawn_by', NEW.drawn_by,
+          'newData', json_build_object(
+            'timer', NEW.timer,
+            'used', NEW.used
+          )
+        )::text
       );
-    ELSIF NEW.timer = 0 THEN
-        PERFORM pg_notify('draw_update', 
-            json_build_object(
-                'table_name', 'draw',
-                'operation', 'UPDATE',
-                'drawn_by', NEW.drawn_by,
-                'newData', json_build_object(
-                    'timer', NEW.timer,
-                    'used', NEW.used
-                )
-            )::text
-        );
     END IF;
-
     RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
