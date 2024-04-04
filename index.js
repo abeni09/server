@@ -230,7 +230,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         // Insert the drawer into the Draw table
         insertQuery = await pool.query(
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
-          VALUES ($1, $5, $5, $2, false, $3, $4) 
+          VALUES ($1, $5, $5, $2, 0, $3, $4) 
           RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
           [drawer.id, countdownSeconds, batchNumber, refererDraw, drawStartedValue]
         );
@@ -239,7 +239,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         // Insert the drawer into the Draw table
         insertQuery = await pool.query(
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
-          VALUES ($1, $4, $4, $2, false, $3) 
+          VALUES ($1, $4, $4, $2, 0, $3) 
           RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
           [drawer.id, countdownSeconds, batchNumber, drawStartedValue]
         );
@@ -290,7 +290,7 @@ function startTimerListener(drawId, member_spin_timeout) {
         const { timer, used, drawn_by } = drawRecord;
         const updatedTimer = timer - 1;
 
-        if (used) {
+        if (used == 1) {
           // If used is true, cancel the interval
           console.log(`Draw record with ID ${drawId} has been used. Stopping timer.`);
           clearInterval(intervalId);
@@ -406,7 +406,7 @@ async function createFunctionsForTriggers(){
   AS $BODY$
     BEGIN
       -- Emit a notification on the 'draw_update' channel
-      IF NEW.used = true THEN
+      IF NEW.used = 1 THEN
         PERFORM pg_notify('draw_update', 
           json_build_object(
             'table_name', 'draw',
@@ -849,7 +849,7 @@ async function createTablesWithTriggers(){
         draw_date timestamp without time zone NOT NULL,
         drawn_by integer NOT NULL,
         timer integer NOT NULL,
-        used boolean NOT NULL,
+        used INTEGER NOT NULL,
         batch_number integer NOT NULL,
         referer_draw integer,
         CONSTRAINT draw_pkey PRIMARY KEY (id),
@@ -1118,7 +1118,7 @@ async function createTables() {
         draw_date TIMESTAMP,
         drawn_by INTEGER,
         timer INTEGER,
-        used BOOLEAN,
+        used INTEGER,
         batch_number INTEGER,
         referer_draw INTEGER,
         FOREIGN KEY (drawn_by) REFERENCES Members(id)
@@ -1250,7 +1250,7 @@ async function createTriggers() {
                     
                     -- Insert into Draw table with drawerRecord values and countdown
                     INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
-                    VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, false, i);
+                    VALUES (drawerRecord.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, countdownSeconds, 0, i);
                 ELSE
                     -- No more eligible winners found
                     RAISE NOTICE 'No winner found for batch %', i;
@@ -1341,7 +1341,7 @@ async function createTriggers() {
                   END IF;
               
                   -- Check if the 'used' value is set to true
-                  IF NEW.used = TRUE THEN
+                  IF NEW.used = 1 THEN
                       -- Stop the countdown if 'used' is set to true
                       EXIT;
                   END IF;
@@ -1371,7 +1371,7 @@ async function createTriggers() {
                       IF randomMemberId IS NOT NULL THEN
                           -- Insert a new row into the Draw table with the selected member id
                           INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
-                          VALUES (randomMemberId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, initialCountdownSeconds, false, NEW.batch_number, NEW.id);
+                          VALUES (randomMemberId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, initialCountdownSeconds, 0, NEW.batch_number, NEW.id);
                           
                           -- Set timer_finished to true
                           -- NEW.timer_finished := true;
@@ -1445,7 +1445,7 @@ async function createTriggers() {
     -- Log the values of NEW.timer and NEW.used for debugging
     RAISE NOTICE 'Timer: %, Used: %', NEW.timer, NEW.used;
     -- Emit a notification on the 'draw_update' channel
-    IF NEW.used = true OR NEW.timer = 0 THEN
+    IF NEW.used = 1 OR NEW.timer = 0 THEN
       PERFORM pg_notify('draw_update', 
         json_build_object(
           'table_name', 'draw',
@@ -2147,7 +2147,7 @@ app.post('/stopSpinner', async (req, res) => {
       const checkQuery = `
         SELECT * 
         FROM Draw 
-        WHERE id = $1 AND drawn_by = $2 AND used = false AND timer > 0
+        WHERE id = $1 AND drawn_by = $2 AND used = 0 AND timer > 0
       `;
       const checkResult = await pool.query(checkQuery, [drawID, drawnBy]);
   
@@ -2173,7 +2173,7 @@ app.post('/stopSpinner', async (req, res) => {
       // Step 2: Update the row's used value to true
       const updateQuery = `
         UPDATE Draw
-        SET used = true
+        SET used = 1
         WHERE id = $1
       `;
       await pool.query(updateQuery, [drawID]);

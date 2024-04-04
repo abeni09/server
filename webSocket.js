@@ -251,7 +251,7 @@ function updateMemberOnlineStatus(memberId, online) {
                             data: newData,
                             candidates: candidates
                         };
-                        console.log(candidates);
+                        // console.log(candidates);
                         client.send(JSON.stringify(message));
                     })
                     .catch((err) => {
