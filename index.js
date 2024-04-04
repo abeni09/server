@@ -181,7 +181,10 @@ async function checkForChanges(newDrawStarted) {
             // fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout)
             const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
             if (newDrawId) {
-              startTimerListener(newDrawId, member_spin_timeout);
+              setTimeout(() => {
+                startTimerListener(newDrawId, member_spin_timeout);
+                
+              }, 5000);
             }
             
             
