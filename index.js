@@ -1542,7 +1542,7 @@ async function createTriggers() {
       UPDATE lottonumbers
       SET expired = true
       WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
-      AND lotto_number <> NEW.lotto_number;
+      AND id <> NEW.lotto_number;
   
       -- Set the winner value to true for the winner's row
       UPDATE lottonumbers
