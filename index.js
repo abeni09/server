@@ -183,10 +183,10 @@ async function checkForChanges(newDrawStarted) {
             if (newDrawId) {
               console.log(newDrawId);
               console.log("Headstart given for the server to send the draw spinner to the client");
-              setTimeout(() => {
+              // setTimeout(() => {
                 startTimerListener(newDrawId, member_spin_timeout);
                 
-              }, 5000);
+              // }, 5000);
             }
             
             
@@ -1548,13 +1548,13 @@ async function createTriggers() {
     // .catch((error) => {
     //     console.error("Error creating trigger draw started:", error);
     // });
-    await pool.query(countdownTriggerQuery)
-    .then(() => {
-        console.log("Countdown trigger created successfully");
-    })
-    .catch((error) => {
-        console.error("Error creating trigger countdown:", error);
-    });
+    // await pool.query(countdownTriggerQuery)
+    // .then(() => {
+    //     console.log("Countdown trigger created successfully");
+    // })
+    // .catch((error) => {
+    //     console.error("Error creating trigger countdown:", error);
+    // });
     // await pool.query(drawerSelectedTriggerQuery)
     // .then(() => {
     //     console.log("Drawer Selected trigger created successfully");
