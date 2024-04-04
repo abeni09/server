@@ -1525,7 +1525,7 @@ async function createTriggers() {
           
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
-          SET won = TRUE, wonat = SELECT drawstartedat FROM sitesettings
+          SET won = TRUE, wonat = (SELECT drawstartedat FROM sitesettings)
           WHERE id = member_id_value;
           
           RETURN NEW;
@@ -1546,7 +1546,7 @@ async function createTriggers() {
       -- Update the expired value for all rows in lottonumbers except the winner lotto_number
       UPDATE lottonumbers
       SET expired = true
-      WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
+      WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings));
       -- AND id <> NEW.lotto_number;
   
       -- Set the winner value to true for the winner's row
