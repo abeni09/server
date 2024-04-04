@@ -1445,19 +1445,32 @@ async function createTriggers() {
     -- Log the values of NEW.timer and NEW.used for debugging
     RAISE NOTICE 'Timer: %, Used: %', NEW.timer, NEW.used;
     -- Emit a notification on the 'draw_update' channel
-    IF NEW.used = 1 OR NEW.timer = 0 THEN
+    IF NEW.used = 1 THEN
       PERFORM pg_notify('draw_update', 
-        json_build_object(
-          'table_name', 'draw',
-          'operation', 'UPDATE',
-          'drawn_by', NEW.drawn_by,
-          'newData', json_build_object(
-            'timer', NEW.timer,
-            'used', NEW.used
-          )
-        )::text
+          json_build_object(
+              'table_name', 'draw',
+              'operation', 'UPDATE',
+              'drawn_by', NEW.drawn_by,
+              'newData', json_build_object(
+                  'timer', NEW.timer,
+                  'used', NEW.used
+              )
+          )::text
       );
+    ELSIF NEW.timer = 0 THEN
+        PERFORM pg_notify('draw_update', 
+            json_build_object(
+                'table_name', 'draw',
+                'operation', 'UPDATE',
+                'drawn_by', NEW.drawn_by,
+                'newData', json_build_object(
+                    'timer', NEW.timer,
+                    'used', NEW.used
+                )
+            )::text
+        );
     END IF;
+
     RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
@@ -2184,6 +2197,12 @@ app.post('/stopSpinner', async (req, res) => {
         VALUES ($1, $2, $3, NOW(), $4)
       `;
       await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, member.batch_number]);
+      // const finisheQuery = `
+      //   UPDATE Draw
+      //   SET timer = 0
+      //   WHERE id = $1
+      // `;
+      // await pool.query(finisheQuery, [drawID]);
       console.log('Spinner stopped successfully');
       res.status(200).json({ message: 'Spinner stopped successfully' });
     }
