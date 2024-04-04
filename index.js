@@ -113,7 +113,7 @@ const pool = new Pool({
     //   ca: fs.readFileSync('certs/ca.crt')
     // },
     // ssl: true,
-    user: userName,
+    user: 'derash_admin',
     host: hostName,
     database: dbName,
     password: password,
@@ -1500,7 +1500,8 @@ async function createTriggers() {
   END;
   $$ LANGUAGE plpgsql;
   `
-  const updateLottoNumbersAfterWinnerQuery = `-- Create or replace the trigger function
+  const updateLottoNumbersAfterWinnerQuery = `
+  -- Create or replace the trigger function
   CREATE OR REPLACE FUNCTION update_lottonumbers()
   RETURNS TRIGGER AS $$
   BEGIN
