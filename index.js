@@ -181,6 +181,8 @@ async function checkForChanges(newDrawStarted) {
             // fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout)
             const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
             if (newDrawId) {
+              console.log(newDrawId);
+              console.log("Headstart given for the server to send the draw spinner to the client");
               setTimeout(() => {
                 startTimerListener(newDrawId, member_spin_timeout);
                 

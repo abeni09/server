@@ -43,11 +43,12 @@ wss.on('connection', (ws, request) => {
             console.log(`Client ${clientId} reconnected from the same device`);
             // Close the newly established connection
             // ws.close();
-            return;
+            // return;
         }
     }
-    
-    clients.set(clientId, ws); // Store client with its ID
+    else{
+        clients.set(clientId, ws); // Store client with its ID
+    }
     
     ws.on('message', (message) => {
         // Handle client messages if needed
