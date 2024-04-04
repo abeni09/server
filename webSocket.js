@@ -48,6 +48,9 @@ wss.on('connection', (ws, request) => {
     }
     else{
         clients.set(clientId, ws); // Store client with its ID
+
+        // Update online status in the members table
+        updateMemberOnlineStatus(clientId, true);
     }
     
     ws.on('message', (message) => {
@@ -61,9 +64,6 @@ wss.on('connection', (ws, request) => {
         // Update online status in the members table
         updateMemberOnlineStatus(clientId, false);
     });
-
-    // Update online status in the members table
-    updateMemberOnlineStatus(clientId, true);
 });
 
 function fetchTodaysCandidates(memberId) {
