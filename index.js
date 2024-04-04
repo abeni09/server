@@ -1520,7 +1520,7 @@ async function createTriggers() {
   $$ LANGUAGE plpgsql;
   
   -- Create the trigger
-  CREATE TRIGGER update_lottonumbers_trigger
+  CREATE OR REPLACE TRIGGER update_lottonumbers_trigger
   AFTER INSERT ON winners
   FOR EACH ROW
   EXECUTE FUNCTION update_lottonumbers();
