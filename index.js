@@ -224,22 +224,24 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
     // Check if a drawer is found
     if (drawer) {
       var insertQuery
+      const { rows } = await client.query('SELECT drawstartedat FROM sitesettings');
+      const drawStartedValue = rows[0].drawstartedat;
       if (refererDraw) {
         // Insert the drawer into the Draw table
         insertQuery = await pool.query(
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
-          VALUES ($1, CURRENT_TIMESTAMP, CURRENT_DATE, $2, false, $3, $4) 
+          VALUES ($1, $5, $5, $2, false, $3, $4) 
           RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber, refererDraw]
+          [drawer.id, countdownSeconds, batchNumber, refererDraw, Date.parse(drawStartedValue)]
         );
         
       } else {
         // Insert the drawer into the Draw table
         insertQuery = await pool.query(
           `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
-          VALUES ($1, CURRENT_TIMESTAMP, CURRENT_DATE, $2, false, $3) 
-          RETURNING *`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber]
+          VALUES ($1, $4, $4, $2, false, $3) 
+          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+          [drawer.id, countdownSeconds, batchNumber, Date.parse(drawStartedValue)]
         );
         
       }
