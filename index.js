@@ -224,7 +224,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
     // Check if a drawer is found
     if (drawer) {
       var insertQuery
-      const { rows } = await client.query('SELECT drawstartedat FROM sitesettings');
+      const { rows } = await pool.query('SELECT drawstartedat FROM sitesettings');
       const drawStartedValue = rows[0].drawstartedat;
       if (refererDraw) {
         // Insert the drawer into the Draw table
