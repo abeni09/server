@@ -1519,19 +1519,24 @@ async function createTriggers() {
           lotto_number_value := NEW.lotto_number;
           
           -- Retrieve the member_id using lotto_number from the lottonumbers table
-          SELECT member_id INTO member_id_value
+          SELECT member INTO member_id_value
           FROM lottonumbers
-          WHERE lotto_number = lotto_number_value;
+          WHERE id = lotto_number_value;
           
           -- Update the corresponding member's won value to true in the members table
           UPDATE members
-          SET won = TRUE, wonat = NOW()
+          SET won = TRUE, wonat = SELECT drawstartedat FROM sitesettings
           WHERE member_id = member_id_value;
           
           RETURN NEW;
       END;
   END;
   $$ LANGUAGE plpgsql;
+  -- Create the trigger
+  CREATE OR REPLACE TRIGGER update_member_trigger
+  AFTER INSERT ON winners
+  FOR EACH ROW
+  EXECUTE FUNCTION update_lottonumbers();
   `
   const updateLottoNumbersAfterWinnerQuery = `
   -- Create or replace the trigger function
@@ -1542,12 +1547,12 @@ async function createTriggers() {
       UPDATE lottonumbers
       SET expired = true
       WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
-      AND id <> NEW.lotto_number;
+      -- AND id <> NEW.lotto_number;
   
       -- Set the winner value to true for the winner's row
       UPDATE lottonumbers
       SET winner = true
-      WHERE lotto_number = NEW.lotto_number;
+      WHERE id = NEW.lotto_number;
   
       RETURN NEW;
   END;
