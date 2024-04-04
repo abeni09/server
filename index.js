@@ -1478,7 +1478,7 @@ async function createTriggers() {
   CREATE OR REPLACE TRIGGER update_draw_row_trigger
   BEFORE UPDATE ON draw
   FOR EACH ROW
-  WHEN (OLD.timer IS DISTINCT FROM NEW.timer)
+  WHEN (OLD.timer IS DISTINCT FROM NEW.timer OR OLD.used IS DISTINCT FROM NEW.used)
   EXECUTE FUNCTION notify_update_draw_row();
   `
   const notifyChannelOfDrawStopped = `
