@@ -1442,7 +1442,9 @@ async function createTriggers() {
   CREATE OR REPLACE FUNCTION notify_update_draw_row()
   RETURNS TRIGGER AS $$
   BEGIN
-  -- Emit a notification on the 'draw_update' channel
+    -- Log the values of NEW.timer and NEW.used for debugging
+    RAISE NOTICE 'Timer: %, Used: %', NEW.timer, NEW.used;
+    -- Emit a notification on the 'draw_update' channel
     IF NEW.used = true THEN
       PERFORM pg_notify('draw_update', 
         json_build_object(
