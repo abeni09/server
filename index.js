@@ -2242,7 +2242,7 @@ app.post('/stopSpinner', async (req, res) => {
       // Step 3: Insert a row in the winners table
       const insertQuery = `
         INSERT INTO winners (draw_id, lotto_number, won_amount, win_at, batch_number)
-        VALUES ($1, $2, $3, NOW(), $4)
+        VALUES ($1, $2, $3, (select drawstartedat from sitesettings), $4)
       `;
       await pool.query(insertQuery, [drawID, lottonumber.id, member.winamount, member.batch_number]);
       // const finisheQuery = `
