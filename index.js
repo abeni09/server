@@ -1587,7 +1587,7 @@ async function createTriggers() {
   BEGIN
       -- Update drawstarted to false in sitesettings table
       UPDATE sitesettings
-      SET drawstarted = FALSE, drawendedat;
+      SET drawstarted = FALSE, drawendedat = (select drawstartedat from sitesettings);
   END;
   $$ LANGUAGE plpgsql;
   `
@@ -1699,6 +1699,13 @@ async function createTriggers() {
     })
     .catch((error) => {
         console.error("Error creating trigger stop draw:", error);
+    });
+    await pool.query(checkDailyWinnerLimitQuery)
+    .then(() => {
+        console.log("Daily winners limit trigger created successfully");
+    })
+    .catch((error) => {
+        console.error("Error creating trigger Daily winners limit:", error);
     });
     
   } catch (error) {
