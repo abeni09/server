@@ -1587,10 +1587,41 @@ async function createTriggers() {
   BEGIN
       -- Update drawstarted to false in sitesettings table
       UPDATE sitesettings
-      SET drawstarted = FALSE;
+      SET drawstarted = FALSE, drawendedat;
   END;
   $$ LANGUAGE plpgsql;
   `
+  const checkDailyWinnerLimitQuery = `
+  CREATE OR REPLACE FUNCTION check_daily_winners_limit()
+  RETURNS TRIGGER AS $$
+  DECLARE
+      draw_date DATE;
+      num_winners INT;
+  BEGIN
+      -- Get the draw date from sitesettings
+      SELECT date_trunc('day', drawstartedat) INTO draw_date FROM sitesettings;
+
+      -- Count the number of winners for the draw date
+      SELECT COUNT(*) INTO num_winners
+      FROM winners
+      WHERE date_trunc('day', win_at) = draw_date;
+
+      -- Check if the number of winners exceeds the daily limit
+      IF num_winners >= (SELECT daily_number_of_winners FROM sitesettings) THEN
+          -- Raise an exception to prevent the insertion
+          RAISE EXCEPTION 'The number of winners for % has reached the daily limit', draw_date;
+      END IF;
+
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE TRIGGER check_daily_winners_limit_trigger
+  BEFORE INSERT ON winners
+  FOR EACH ROW
+  EXECUTE FUNCTION check_daily_winners_limit();
+
+`
   try {
     await pool.query(checkDrawStartedTriggerQuery)
     .then(() => {
@@ -1803,7 +1834,10 @@ app.post('/startDraw', async (req, res) => {
       const dateAvailable = setting.rows[0].drawstartedat
       if (dateAvailable != null) {
         const lastDate = new Date(setting.rows[0].drawstartedat);
-        incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));
+        incrementedDate = lastDate;
+        if (drawstarted) {
+          incrementedDate = new Date(lastDate.getTime() + (24 * 60 * 60 * 1000));          
+        }
       }
       // await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
       await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, incrementedDate]).then(async()=>{
