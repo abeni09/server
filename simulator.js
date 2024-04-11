@@ -31,7 +31,7 @@ function distributeDaily() {
     totalLuckyUsers += currentLuckyUsers;
     // Mark the first totalLuckyUsers users as lucky in the userContributions array
     for (let i = totalLuckyUsers - currentLuckyUsers; i < totalLuckyUsers; i++) {
-        console.log(`Lucky user # ${i}`);
+        // console.log(`Lucky user # ${i}`);
         userContributions[i].lucky = true;
     }
 
@@ -45,13 +45,13 @@ function distributeDaily() {
     for (let i = 0; i < userContributions.length; i++) {
         if (userContributions[i].contribution < distributionAmount && remainingUsers > 0) {
             if (userContributions[i].lucky == false) {
-                console.log(`unlucky`);
+                // console.log(`unlucky`);
                 userContributions[i].contribution += unluckyContribution;
             } else {
-                console.log(`lucky`);
+                // console.log(`lucky`);
                 userContributions[i].contribution += luckyContribution;
             }
-            console.log(`user # ${i}`);
+            // console.log(`user # ${i}`);
             // console.log(`contribution # ${userContributions[i].contribution}`);
         }
         else if (userContributions[i].contribution >= distributionAmount) {
@@ -80,8 +80,14 @@ function distributeDaily() {
 
     // Modify the condition to check if all users are lucky
     if (!allUsersAreLucky()) {
+        distributeDaily()
         // If not all users are lucky, schedule the next day's distribution
-        setTimeout(distributeDaily, 10000); // Schedule the next distribution after 10 seconds
+        // setTimeout(distributeDaily, 10000); // Schedule the next distribution after 10 seconds
+    }
+    else{
+        const endAt = Date.now();
+        const timeTaken = Math.abs(startAt - endAt) / 1000;
+        console.log(`Total Time Taken: ${timeTaken}`);
     }
 }
 
