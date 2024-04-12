@@ -107,7 +107,7 @@ class DistributionSimulation:
     def distribute_daily(self):
         valid = self.validate_day_counter_input(self.day_counter_entry.get())
         # while not self.stop_event.is_set():
-        while self.remaining_users > 0 and (valid or self.day_counter < int(self.day_counter_entry.get())):
+        while self.remaining_users > 0 and (not valid or self.day_counter < int(self.day_counter_entry.get())):
              
             self.day_counter += 1
             print(f"Day: {self.day_counter}")
