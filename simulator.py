@@ -110,7 +110,7 @@ class DistributionSimulation:
         while self.remaining_users > 0 and (not valid or self.day_counter < int(self.day_counter_entry.get())):
              
             self.day_counter += 1
-            print(f"Day: {self.day_counter}")
+            # print(f"Day: {self.day_counter}")
 
             # Update distribution_amount based on day_counter
             if self.day_counter >= 365 * 3:
