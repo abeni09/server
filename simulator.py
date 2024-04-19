@@ -27,6 +27,7 @@ class DistributionSimulation:
         self.daily_luck_users = []
         self.total_contributions = []
         self.total_lucky_users_list = []
+        self.daily_single_user_payout = []
         self.unlucky_users = []
         self.total_lucky_distribution = []
         self.finished_users_list = []
@@ -71,7 +72,7 @@ class DistributionSimulation:
         self.checkboxes = []
         checkbox_frame = ttk.Frame(main_frame, style="CheckboxFrame.TFrame")
         checkbox_frame.pack(pady=10)
-        texts = ["Daily Lucky Users", "Total Contribution", "Total Lucky Users", "Unlucky Users", "Total Lucky Distribution", "Finished Users"]
+        texts = ["Daily Lucky Users", "Total Contribution", "Total Lucky Users", "Unlucky Users", "Total Lucky Distribution", "Finished Users", "Distributed Amount"]
         for text in texts:
             var = tk.BooleanVar(value=True)
             cb = ttk.Checkbutton(checkbox_frame, text=text, variable=var, style="Checkbox.TCheckbutton")
@@ -113,14 +114,14 @@ class DistributionSimulation:
             # print(f"Day: {self.day_counter}")
 
             # Update distribution_amount based on day_counter
-            if self.day_counter >= 365 * 3:
+            if self.day_counter > 365 * 2:
                 self.distribution_amount = 500000  # Change distribution_amount to 500,000 after 3 years
                 # Update distribution_amount for users who have not been lucky yet
                 for user in self.user_contributions:
                     if not user["lucky"]:
                         user["distributionAmount"] = self.distribution_amount
 
-            if self.day_counter >= 365 * 5:
+            if self.day_counter > 365 * 4:
                 self.distribution_amount = 250000  # Change distribution_amount to 250,000 after 5 years
                 # Update distribution_amount for users who have not been lucky yet
                 for user in self.user_contributions:
@@ -174,6 +175,7 @@ class DistributionSimulation:
             self.daily_luck_users.append(current_lucky_users)
             self.total_contributions.append(total_contribution)
             self.total_lucky_users_list.append(self.total_lucky_users)
+            self.daily_single_user_payout.append(self.distribution_amount)
             self.unlucky_users.append(self.remaining_users)
             self.total_lucky_distribution.append(self.total_lucky_users * self.distribution_amount)
             self.finished_users_list.append(self.finished_users)
@@ -196,7 +198,7 @@ class DistributionSimulation:
     def plot_data(self, checkboxes):
         selected_items = [var.get() for var in checkboxes]
         num_selected = sum(selected_items)
-        num_plots = min(num_selected, 6)  # Maximum of 6 subplots
+        num_plots = min(num_selected, 7)  # Maximum of 6 subplots
 
         if num_plots == 0:
             print("No items selected for plotting.")
@@ -243,6 +245,11 @@ class DistributionSimulation:
                     plt.xlabel("Days")
                     plt.ylabel("Finished Users")
                     plt.title("Finished Users Over Time")
+                elif i == 6:
+                    plt.bar(self.days, self.daily_single_user_payout)
+                    plt.xlabel("Days")
+                    plt.ylabel("Distributed Amount")
+                    plt.title("Daily Single User Distribution")
 
         plt.tight_layout()
         plt.get_current_fig_manager().window.state('zoomed')  # Maximize the plot window
@@ -254,6 +261,7 @@ class DistributionSimulation:
         self.day_counter = 0
         self.total_lucky_users = 0
         self.remaining_users = 100000
+        self.distribution_amount = 1000000
         self.remaining_amount = 0
         self.finished_users = 0
 
@@ -276,6 +284,7 @@ class DistributionSimulation:
         self.daily_luck_users.clear()
         self.total_contributions.clear()
         self.total_lucky_users_list.clear()
+        self.daily_single_user_payout.clear()
         self.unlucky_users.clear()
         self.total_lucky_distribution.clear()
         self.finished_users_list.clear()
