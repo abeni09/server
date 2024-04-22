@@ -1876,13 +1876,17 @@ app.get('/fetchWinners', async (req, res) => {
     
     const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
+    console.log(user.role.trim());
     if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
       
       const winners = await pool.query(
-        `SELECT winners.win_at, lottonumbers.lotto_number, members.*
+        `SELECT winners.win_at, lottonumbers.lotto_number, members.name,
+        members.phone, members.winamount, members.batch_number
         FROM winners
         JOIN lottonumbers ON winners.lotto_number = lottonumbers.id
         JOIN members ON lottonumbers.member = members.id`);
+        console.log(winners.rowCount);
+        // console.log(winners.rows);
       res.status(200).json({ winners: winners.rows, message: 'Winners data fetched successfully' });
     }
     else{
