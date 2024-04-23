@@ -17,7 +17,7 @@ const { setTimeout } = require('timers');
 const axios = require('axios'); // Import Axios for making HTTP requests
 // const { createProxyMiddleware } = require('http-proxy-middleware');
 
-const verifyToken = require('./middleware');
+// const verifyToken = require('./middleware');
 const app = express();
 
 // // Define a reverse proxy middleware for your insecure HTTP service
@@ -33,7 +33,7 @@ const port = 3006;
 
 // Enable CORS for all routes
 app.use(cors());
-app.use(verifyToken);
+// app.use(verifyToken);
 
 // Parse URL-encoded bodies
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -1757,8 +1757,8 @@ app.post('/loginStaff', async (req, res) => {
             await pool.query('UPDATE users SET password = $1 WHERE phone = $2', [hashedPassword, `+251${phone}`]);
             const result = await pool.query('SELECT * FROM users WHERE phone = $1', [`+251${phone}`]);
             // Generate JWT token
-            const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-            res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+            // const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+            res.status(200).json({ message: 'Login successful', data: result.rows[0] });
         } else {
             const result = await pool.query('SELECT * FROM users WHERE phone = $1', [`+251${phone}`]);
             if (result.rows.length === 1) {
@@ -1767,8 +1767,8 @@ app.post('/loginStaff', async (req, res) => {
                   const passwordMatch = await bcrypt.compare(password, storedPassword);
                   if (passwordMatch) {
                       // Generate JWT token
-                      const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-                      res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+                      // const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+                      res.status(200).json({ message: 'Login successful', data: result.rows[0] });
                   } else {
                       res.status(401).json({ message: 'Invalid phone or password' });
                   }                  
@@ -1797,8 +1797,8 @@ app.post('/loginMember', async (req, res) => {
             await pool.query('UPDATE members SET password = $1 WHERE phone = $2', [hashedPassword, `+251${phone}`]);
             const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
             // Generate JWT token
-            const token = jwt.sign({ phone: result.rows[0].phone, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-            res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+            // const token = jwt.sign({ phone: result.rows[0].phone, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+            res.status(200).json({ message: 'Login successful', data: result.rows[0] });
         } else {
             const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
             if (result.rows.length === 1) {
@@ -1807,8 +1807,8 @@ app.post('/loginMember', async (req, res) => {
                   const passwordMatch = await bcrypt.compare(password, storedPassword);
                   if (passwordMatch) {
                       // Generate JWT token
-                      const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-                      res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+                      // const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+                      res.status(200).json({ message: 'Login successful', data: result.rows[0] });
                   } else {
                       res.status(401).json({ message: 'Invalid phone or password' });
                   }                  
