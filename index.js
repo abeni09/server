@@ -267,8 +267,8 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         draw_date: new Date().toISOString(),
         timer: countdownSeconds,
         used: false,
-        batch_number: batchNumber,
-        referer_draw: refererDraw
+        batch_number: batchNumber
+        // referer_draw: refererDraw
       });
 
       const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
