@@ -122,10 +122,10 @@ const pool = new Pool({
 const firebase = require('firebase-admin');
 
 // Initialize Firebase Admin SDK (you need to set up service account credentials)
-const serviceAccount = require('adminSDK.json');
+const serviceAccount = require('./adminSDK.json');
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+firebase.initializeApp({
+  credential: firebase.credential.cert(serviceAccount),
   databaseURL: "https://aura-delivery-et-default-rtdb.firebaseio.com"
 });
 // Define a function to drop a single table
