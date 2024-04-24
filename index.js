@@ -17,7 +17,7 @@ const { setTimeout } = require('timers');
 const axios = require('axios'); // Import Axios for making HTTP requests
 // const { createProxyMiddleware } = require('http-proxy-middleware');
 
-// const verifyToken = require('./middleware');
+const verifyToken = require('./middleware');
 const app = express();
 
 // // Define a reverse proxy middleware for your insecure HTTP service
@@ -33,7 +33,7 @@ const port = 3006;
 
 // Enable CORS for all routes
 app.use(cors());
-// app.use(verifyToken);
+app.use(verifyToken);
 
 // Parse URL-encoded bodies
 app.use(bodyParser.urlencoded({ extended: true }));

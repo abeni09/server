@@ -13,21 +13,25 @@ function verifyToken(req, res, next) {
 
     const authHeader = req.headers['authorization'];
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && !authHeader.startsWith('Bearer ')) {
         return res.status(403).json({ message: 'Authorization header is missing or invalid' });
     }
+    else{
+        if (authHeader) {
+            const token = authHeader.split(' ')[1];
 
-    const token = authHeader.split(' ')[1];
-
-    jwt.verify(token, secretKey, (err, decoded) => {
-        if (err) {
-            return res.status(401).json({ message: 'Failed to authenticate token' });
-        } else {
-            // If verification is successful, save the decoded token to the request object for use in other middleware or routes
-            req.user = decoded;
-            next();
+            jwt.verify(token, secretKey, (err, decoded) => {
+                if (err) {
+                    return res.status(401).json({ message: 'Failed to authenticate token' });
+                    // next();
+                } else {
+                    // If verification is successful, save the decoded token to the request object for use in other middleware or routes
+                    req.user = decoded;
+                    next();
+                }
+            });
         }
-    });
+    }
 }
 
 module.exports = verifyToken;
