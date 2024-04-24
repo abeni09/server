@@ -238,35 +238,35 @@ function updateMemberOnlineStatus(memberId, online) {
                 
             }
 
-//         // Check if the notification is for an INSERT operation on the "draw" table
-            else if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
-                const client = clients.get(drawn_by.toString());
-                console.log(`Sending draw data to client ${drawn_by}`);
+// //         // Check if the notification is for an INSERT operation on the "draw" table
+//             else if (table_name === 'draw' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
+//                 const client = clients.get(drawn_by.toString());
+//                 console.log(`Sending draw data to client ${drawn_by}`);
                 
-                // Fetch today's candidates
-                fetchTodaysCandidates(drawn_by)
-                    .then((candidates) => {
-                        // Construct the message object including table name, operation, and new data
-                        const message = {
-                            data: newData,
-                            candidates: candidates
-                        };
-                        // console.log(candidates);
-                        client.send(JSON.stringify(message));
-                    })
-                    .catch((err) => {
-                        console.error('Error fetching candidates:', err);
-                    });
-            }
-            else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by.toString())) {
-                const client = clients.get(drawn_by.toString());
-                console.log(`Sending draw countdown data to client ${drawn_by}`);
+//                 // Fetch today's candidates
+//                 fetchTodaysCandidates(drawn_by)
+//                     .then((candidates) => {
+//                         // Construct the message object including table name, operation, and new data
+//                         const message = {
+//                             data: newData,
+//                             candidates: candidates
+//                         };
+//                         // console.log(candidates);
+//                         client.send(JSON.stringify(message));
+//                     })
+//                     .catch((err) => {
+//                         console.error('Error fetching candidates:', err);
+//                     });
+//             }
+//             else if (table_name === 'draw' && operation === 'UPDATE' && clients.has(drawn_by.toString())) {
+//                 const client = clients.get(drawn_by.toString());
+//                 console.log(`Sending draw countdown data to client ${drawn_by}`);
                 
-                const message = {
-                    data: newData
-                };
-                client.send(JSON.stringify(message));
-            }
+//                 const message = {
+//                     data: newData
+//                 };
+//                 client.send(JSON.stringify(message));
+//             }
             else if (table_name === 'winners' && operation === 'INSERT' && clients.has(drawn_by.toString())) {
                 getWinnerMember(drawn_by)
                     .then((winnerID)=>{

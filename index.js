@@ -119,6 +119,15 @@ const pool = new Pool({
     password: password,
     port: 5432,
 });
+const firebase = require('firebase-admin');
+
+// Initialize Firebase Admin SDK (you need to set up service account credentials)
+const serviceAccount = require('adminSDK.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://aura-delivery-et-default-rtdb.firebaseio.com"
+});
 // Define a function to drop a single table
 async function dropTable(tableName) {
     try {
@@ -188,8 +197,9 @@ async function checkForChanges(newDrawStarted) {
               console.log("Headstart given for the server to send the draw spinner to the client");
               setTimeout(() => {
                 startTimerListener(newDrawId, member_spin_timeout);
+                startCountdownTimer(newDrawId, member_spin_timeout)
                 
-              }, 5000);
+              }, 10000);
             }
             
             
@@ -248,6 +258,18 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         );
         
       }
+      
+      // Write data to Firebase
+      const drawRef = firebase.database().ref('Draw').child(drawer.id);
+      drawRef.set({
+        drawn_by: drawer.id,
+        drawn_at: new Date().toISOString(),
+        draw_date: new Date().toISOString(),
+        timer: countdownSeconds,
+        used: false,
+        batch_number: batchNumber,
+        referer_draw: refererDraw
+      });
 
       const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
       const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
@@ -274,66 +296,132 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
     return null; // Return null in case of an error
   }
 }
+// // Function to continuously monitor Draw table and decrease timer
+// function startTimerListener(drawId, member_spin_timeout) {
+//   // Set an interval to execute the timer logic every second
+//   const intervalId = setInterval(async () => {
+//     list_of_intervals.push(intervalId)
+//     try {
+//       // Fetch the record from Draw table by ID
+//       const drawQuery = await pool.query(
+//         `SELECT * FROM Draw WHERE id = $1`,
+//         [drawId]
+//       );
+
+//       // Check if the record exists and if timer is greater than 0
+//       if (drawQuery.rows.length > 0) {
+//         // Decrease the timer by 1 second
+//         const drawRecord = drawQuery.rows[0];
+//         const { timer, used, drawn_by } = drawRecord;
+//         const updatedTimer = timer - 1;
+
+//         if (used == 1) {
+//           // If used is true, cancel the interval
+//           console.log(`Draw record with ID ${drawId} has been used. Stopping timer.`);
+//           clearInterval(intervalId);
+          
+//         } 
+//         else {
+//           // Update the timer value in the database
+//           await pool.query(
+//             `UPDATE Draw SET timer = $1 WHERE id = $2`,
+//             [updatedTimer, drawId]
+//           );
+//           // await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": ${drawn_by}, "newData": ${updatedTimer}}')`);
+
+  
+//           console.log(`Timer decreased for draw record with ID ${drawId}: ${updatedTimer} seconds remaining`);
+  
+//           // Check if the timer has reached 0
+//           if (updatedTimer === 0) {
+//             // Clear the interval if the timer reaches 0
+//             clearInterval(intervalId);
+//             // Fetch a new drawer and insert into Draw table
+//             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
+//             // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+//             const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+//             if (newDrawId) {
+//               setTimeout(() => {
+//                 startTimerListener(newDrawId, member_spin_timeout);
+//               }, 10000);
+//               // startTimerListener(newDrawId, member_spin_timeout);
+//             }
+//           }
+        
+//         }
+//       } else {
+//         // Clear the interval if the record does not exist
+//         clearInterval(intervalId);
+//       }
+//     } catch (error) {
+//       console.error('Error occurred while updating timer:', error.message);
+//       // Clear the interval if error
+//       clearInterval(intervalId);
+//     }
+//   }, 1000); // Interval of 1 second
+// }
+
 // Function to continuously monitor Draw table and decrease timer
 function startTimerListener(drawId, member_spin_timeout) {
-  // Set an interval to execute the timer logic every second
-  const intervalId = setInterval(async () => {
-    list_of_intervals.push(intervalId)
+  // Set a Firebase Realtime Database listener to monitor changes in the draw data
+  const drawRef = firebase.database().ref(`/Draw/${drawId}`);
+  drawRef.on('value', async (snapshot) => {
     try {
-      // Fetch the record from Draw table by ID
-      const drawQuery = await pool.query(
-        `SELECT * FROM Draw WHERE id = $1`,
-        [drawId]
-      );
+      const drawData = snapshot.val();
+      if (drawData) {
+        // Check if the timer is greater than 0
+        if (drawData.timer > 0 && !drawData.used) {
+          // Decrease the timer by 1 second
+          const updatedTimer = drawData.timer - 1;
 
-      // Check if the record exists and if timer is greater than 0
-      if (drawQuery.rows.length > 0) {
-        // Decrease the timer by 1 second
-        const drawRecord = drawQuery.rows[0];
-        const { timer, used, drawn_by } = drawRecord;
-        const updatedTimer = timer - 1;
+          // Update the timer value in Firebase
+          drawRef.update({ timer: updatedTimer });
 
-        if (used == 1) {
-          // If used is true, cancel the interval
-          console.log(`Draw record with ID ${drawId} has been used. Stopping timer.`);
-          clearInterval(intervalId);
-          
-        } 
-        else {
-          // Update the timer value in the database
-          await pool.query(
-            `UPDATE Draw SET timer = $1 WHERE id = $2`,
-            [updatedTimer, drawId]
-          );
-          // await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": ${drawn_by}, "newData": ${updatedTimer}}')`);
-
-  
           console.log(`Timer decreased for draw record with ID ${drawId}: ${updatedTimer} seconds remaining`);
-  
+
           // Check if the timer has reached 0
           if (updatedTimer === 0) {
-            // Clear the interval if the timer reaches 0
-            clearInterval(intervalId);
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
-            // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
-            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawData.batch_number, member_spin_timeout, drawId);
             if (newDrawId) {
-              startTimerListener(newDrawId, member_spin_timeout);
+              setTimeout(() => {
+                startTimerListener(newDrawId, member_spin_timeout);
+              }, 10000);
             }
           }
-        
+        } else {
+          // If used is true, cancel the timer
+          console.log(`Draw record with ID ${drawId} has been used or timer is 0. Stopping timer.`);
+          drawRef.off(); // Remove the listener
         }
       } else {
-        // Clear the interval if the record does not exist
-        clearInterval(intervalId);
+        // If the record does not exist, cancel the timer
+        console.log(`Draw record with ID ${drawId} does not exist. Stopping timer.`);
+        drawRef.off(); // Remove the listener
       }
     } catch (error) {
       console.error('Error occurred while updating timer:', error.message);
-      // Clear the interval if error
-      clearInterval(intervalId);
+      // If error, cancel the timer
+      drawRef.off(); // Remove the listener
     }
-  }, 1000); // Interval of 1 second
+  });
+}
+
+// Function to start countdown timer
+function startCountdownTimer(drawID, member_spin_timeout) {
+  let countdownSeconds = member_spin_timeout;
+
+  const countdownInterval = setInterval(() => {
+    countdownSeconds--;
+
+    // Update Firebase with countdown status
+    firebase.database().ref(`/Draw/${drawID}`).update({ timer: countdownSeconds });
+
+    if (countdownSeconds <= 0) {
+      clearInterval(countdownInterval);
+    }
+  }, 1000); // Update every second
 }
 async function createFunctionsForTriggers(){
   pool.query(`
@@ -1826,6 +1914,37 @@ app.post('/loginMember', async (req, res) => {
     }
 });
 
+app.get('/todaysCandidates/:memberID', async (req, res) => {
+  try {
+    const member_id = req.params.memberID
+    const memberQuery = await pool.query('SELECT batch_number FROM members WHERE id = $1', [member_id])
+    const batch_number = memberQuery.rows[0].batch_number
+    if (batch_number != null) {
+      const settingsQuery = await pool.query('SELECT drawstartedat FROM SiteSettings') 
+      const drawstartedat = settingsQuery.rows[0].drawstartedat
+      if (drawstartedat != null) {
+        
+        const query = `
+        SELECT lottonumbers.lotto_number, lottonumbers.id, members.id FROM lottonumbers 
+        JOIN members ON lottonumbers.member = members.id
+        WHERE lottonumbers.batch_number = $1 
+        AND lottonumbers.winner = $2 
+        AND lottonumbers.expired = $3 
+        AND DATE(lottonumbers.deposited_at) = DATE($4) 
+        AND members.won = false 
+        ORDER BY RANDOM()`;
+        const lottoNumbersQuery = pool.query(query, [batch_number, false, false, drawstartedat])
+        res.status(200).json({ candidates: lottoNumbersQuery.rows, message: 'Candidates data fetched successfully' });
+        
+      }
+      
+    }
+    res.status(500).json({message: 'Unable to fetch candidates' });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({message: 'Internal server error' });
+  }
+});
 
 app.post('/startDraw', async (req, res) => {
   try {
