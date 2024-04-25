@@ -190,9 +190,11 @@ async function checkForChanges(newDrawStarted) {
           // Implement the logic to fetch random drawer and insert into Draw table here
           console.log(`Fetching drawer for batch ${i}`);
           for (let j = 0; j < daily_number_of_winners; j++) {
+            // console.log(daily_number_of_winners);
             // fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout)
             const [newDrawId, drawerId] = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
-            if (newDrawId) {
+            // console.log(newDrawId);
+            if (newDrawId != null && drawerId != null) {
               console.log(newDrawId);
               console.log("Headstart given for the server to send the draw spinner to the client");
               setTimeout(() => {
@@ -231,69 +233,66 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
       LIMIT 1`,
       [batchNumber]
     );
-
-    const drawer = drawerQuery.rows[0];
-
-    // Check if a drawer is found
-    if (drawer) {
-      var insertQuery
-      const { rows } = await pool.query('SELECT drawstartedat FROM sitesettings');
-      const drawStartedValue = rows[0].drawstartedat;
-      if (refererDraw) {
-        // Insert the drawer into the Draw table
-        insertQuery = await pool.query(
-          `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
-          VALUES ($1, $5, $5, $2, 0, $3, $4) 
-          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber, refererDraw, drawStartedValue]
-        );
-        
-      } else {
-        // Insert the drawer into the Draw table
-        insertQuery = await pool.query(
-          `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
-          VALUES ($1, $4, $4, $2, 0, $3) 
-          RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
-          [drawer.id, countdownSeconds, batchNumber, drawStartedValue]
-        );
-        
-      }
-      
-      // Write data to Firebase
-      const drawRef = firebase.database().ref('Draw').child(drawer.id);
-      drawRef.set({
-        drawn_by: drawer.id,
-        drawn_at: new Date().toISOString(),
-        draw_date: new Date().toISOString(),
-        timer: countdownSeconds,
-        used: false,
-        batch_number: batchNumber
-        // referer_draw: refererDraw
-      });
-
-      const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
-      const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
-      // const newDrawerQuery = await pool.query(
-      //   `SELECT * FROM draw 
-      //   WHERE id = $1`,
-      //   [newDrawId]
-      // );
+    if (drawerQuery.rows && drawerQuery.rowCount > 0) {
+      const drawer = drawerQuery.rows[0];
   
-      // const newDrawer = newDrawerQuery.rows[0];
-
-      console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
-      // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
-      // Correct query string for sending notification
-      // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": ${drawer.drawn_by}, "newData": ${JSON.stringify(drawer)}}')`);
-
-      return [newDrawId, drawer.id]; // Return the newly inserted row's ID
-    } else {
+      // Check if a drawer is found
+      if (drawer) {
+        const drawerId = drawer.id
+        var insertQuery
+        const { rows } = await pool.query('SELECT drawstartedat FROM sitesettings');
+        const drawStartedValue = rows[0].drawstartedat;
+        if (refererDraw) {
+          // Insert the drawer into the Draw table
+          insertQuery = await pool.query(
+            `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number, referer_draw) 
+            VALUES ($1, $5, $5, $2, 0, $3, $4) 
+            RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+            [drawer.id, countdownSeconds, batchNumber, refererDraw, drawStartedValue]
+          );
+          
+        } else {
+          // Insert the drawer into the Draw table
+          insertQuery = await pool.query(
+            `INSERT INTO Draw (drawn_by, drawn_at, draw_date, timer, used, batch_number) 
+            VALUES ($1, $4, $4, $2, 0, $3) 
+            RETURNING id`, // Include RETURNING clause to get the newly inserted row's ID
+            [drawer.id, countdownSeconds, batchNumber, drawStartedValue]
+          );
+          
+        }
+        
+        // Write data to Firebase
+        const drawRef = firebase.database().ref('Draw').child(drawer.id);
+        drawRef.set({
+          drawn_by: drawer.id,
+          drawn_at: new Date().toISOString(),
+          draw_date: new Date().toISOString(),
+          timer: countdownSeconds,
+          used: false,
+          batch_number: batchNumber
+          // referer_draw: refererDraw
+        });
+  
+        const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
+        const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
+  
+        console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
+        // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
+        // Correct query string for sending notification
+        // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": ${drawer.drawn_by}, "newData": ${JSON.stringify(drawer)}}')`);
+  
+        return [newDrawId, drawerId]; // Return the newly inserted row's ID
+      } 
+      
+    }
+    else {
       console.log(`No drawer found for batch ${batchNumber}`);
-      return null; // Return null if no drawer is found
+      return [null, null]; // Return null if no drawer is found
     }
   } catch (error) {
     console.error(`Error occurred while fetching random drawer and inserting into Draw table for batch ${batchNumber}:`, error.message);
-    return null; // Return null in case of an error
+    return [null, null]; // Return null in case of an error
   }
 }
 // // Function to continuously monitor Draw table and decrease timer
@@ -384,7 +383,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
             const [newDrawId, drawerId] = await fetchRandomDrawerAndInsertIntoDraw(drawData.batch_number, member_spin_timeout, drawId);
-            if (newDrawId) {
+            if (newDrawId != null && drawerId != null) {
               setTimeout(() => {
                 startTimerListener(newDrawId, drawerId, member_spin_timeout);
               }, 10000);
@@ -1885,8 +1884,9 @@ app.post('/loginMember', async (req, res) => {
             await pool.query('UPDATE members SET password = $1 WHERE phone = $2', [hashedPassword, `+251${phone}`]);
             const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
             // Generate JWT token
-            const token = jwt.sign({ phone: result.rows[0].phone, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-            res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+            // const token = jwt.sign({ phone: result.rows[0].phone, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+            // res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+            res.status(200).json({ message: 'Login successful', data: result.rows[0] });
         } else {
             const result = await pool.query('SELECT * FROM members WHERE phone = $1', [`+251${phone}`]);
             if (result.rows.length === 1) {
@@ -1895,8 +1895,9 @@ app.post('/loginMember', async (req, res) => {
                   const passwordMatch = await bcrypt.compare(password, storedPassword);
                   if (passwordMatch) {
                       // Generate JWT token
-                      const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
-                      res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
+                      // const token = jwt.sign({ phone: result.rows[0].phone, role: result.rows[0].role, userId: result.rows[0].id }, SECRET_KEY, { expiresIn: '1h' });
+                      res.status(200).json({ message: 'Login successful', data: result.rows[0] });
+                      // res.status(200).json({ message: 'Login successful', token: token, data: result.rows[0] });
                   } else {
                       res.status(401).json({ message: 'Invalid phone or password' });
                   }                  
