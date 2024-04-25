@@ -191,13 +191,13 @@ async function checkForChanges(newDrawStarted) {
           console.log(`Fetching drawer for batch ${i}`);
           for (let j = 0; j < daily_number_of_winners; j++) {
             // fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout)
-            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
+            const [newDrawId, drawerId] = await fetchRandomDrawerAndInsertIntoDraw(i, member_spin_timeout);
             if (newDrawId) {
               console.log(newDrawId);
               console.log("Headstart given for the server to send the draw spinner to the client");
               setTimeout(() => {
                 startTimerListener(newDrawId, member_spin_timeout);
-                startCountdownTimer(newDrawId, member_spin_timeout)
+                // startCountdownTimer(newDrawId, member_spin_timeout)
                 
               }, 10000);
             }
@@ -286,7 +286,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
       // Correct query string for sending notification
       // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": ${drawer.drawn_by}, "newData": ${JSON.stringify(drawer)}}')`);
 
-      return newDrawId; // Return the newly inserted row's ID
+      return [newDrawId, drawer.id]; // Return the newly inserted row's ID
     } else {
       console.log(`No drawer found for batch ${batchNumber}`);
       return null; // Return null if no drawer is found
@@ -362,9 +362,9 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
 // }
 
 // Function to continuously monitor Draw table and decrease timer
-function startTimerListener(drawId, member_spin_timeout) {
+function startTimerListener(drawId, drawerId, member_spin_timeout) {
   // Set a Firebase Realtime Database listener to monitor changes in the draw data
-  const drawRef = firebase.database().ref(`/Draw/${drawId}`);
+  const drawRef = firebase.database().ref(`/Draw/${drawerId}`);
   drawRef.on('value', async (snapshot) => {
     try {
       const drawData = snapshot.val();
@@ -383,10 +383,10 @@ function startTimerListener(drawId, member_spin_timeout) {
           if (updatedTimer === 0) {
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
-            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawData.batch_number, member_spin_timeout, drawId);
+            const [newDrawId, drawerId] = await fetchRandomDrawerAndInsertIntoDraw(drawData.batch_number, member_spin_timeout, drawId);
             if (newDrawId) {
               setTimeout(() => {
-                startTimerListener(newDrawId, member_spin_timeout);
+                startTimerListener(newDrawId, drawerId, member_spin_timeout);
               }, 10000);
             }
           }
