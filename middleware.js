@@ -30,6 +30,10 @@ function verifyToken(req, res, next) {
             }
         });
     }
+    else{
+        
+        next();
+    }
     // }
 }
 
