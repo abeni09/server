@@ -126,7 +126,7 @@ const serviceAccount = require('./adminSDK.json');
 
 firebase.initializeApp({
   credential: firebase.credential.cert(serviceAccount),
-  databaseURL: "https://aura-delivery-et-default-rtdb.firebaseio.com"
+  databaseURL: "https://derash-567f2-default-rtdb.firebaseio.com/"
 });
 // Define a function to drop a single table
 async function dropTable(tableName) {
