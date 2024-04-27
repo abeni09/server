@@ -1934,7 +1934,8 @@ app.get('/todaysCandidates/:memberID', async (req, res) => {
         AND DATE(lottonumbers.deposited_at) = DATE($4) 
         AND members.won = false 
         ORDER BY RANDOM()`;
-        const lottoNumbersQuery = pool.query(query, [batch_number, false, false, drawstartedat])
+        const lottoNumbersQuery = await pool.query(query, [batch_number, false, false, drawstartedat])
+        console.log((lottoNumbersQuery).rowCount);
         res.status(200).json({ candidates: lottoNumbersQuery.rows, message: 'Candidates data fetched successfully' });
         
       }
