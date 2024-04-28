@@ -1926,7 +1926,7 @@ app.get('/todaysCandidates/:memberID', async (req, res) => {
       if (drawstartedat != null) {
         
         const query = `
-        SELECT lottonumbers.lotto_number, lottonumbers.id, members.id FROM lottonumbers 
+        SELECT lottonumbers.lotto_number, members.id FROM lottonumbers 
         JOIN members ON lottonumbers.member = members.id
         WHERE lottonumbers.batch_number = $1 
         AND lottonumbers.winner = $2 
@@ -1941,13 +1941,31 @@ app.get('/todaysCandidates/:memberID', async (req, res) => {
       }
       
     }
-    res.status(500).json({message: 'Unable to fetch candidates' });
+    else{
+      res.status(500).json({message: 'Unable to fetch candidates' });
+
+    }
   } catch (error) {
     console.log(error);
     res.status(500).json({message: 'Internal server error' });
   }
 });
-
+app.post('/resetFirebaseDrawData', async (req, res) => {
+  try {
+    const { drawerId } = req.body;
+        
+    // Set data to null
+    const drawRef = firebase.database().ref('Draw').child(drawerId);
+    drawRef.set(null);
+    console.error(`Successfully set to null: ${drawerId}`);
+    res.status(200).json({ message: `Successfully set to null`});
+      
+  } catch (error) {
+    console.error('Error setting firebase data null', error);
+    res.status(500).json({ message: `Error setting firebase data null`});
+    
+  }
+})
 app.post('/startDraw', async (req, res) => {
   try {
     const userId = req.user.userId
@@ -1975,6 +1993,22 @@ app.post('/startDraw', async (req, res) => {
 
         // Retrieve the updated setting after the change
         const updatedSetting = await pool.query('SELECT * FROM sitesettings');
+        const drawRef = firebase.database().ref('Settings');
+        const property = drawstarted ? 'drawstartedat' : 'drawendedat';
+
+        // Create an object with a dynamic key using square brackets
+        const dataToUpdate = {};
+        dataToUpdate[property] = incrementedDate;
+        dataToUpdate['drawStarted'] = drawstarted;
+
+        drawRef.update(dataToUpdate)
+            .then(function() {
+                console.log("Set succeeded.");
+            })
+            .catch(function(error) {
+                console.log("Set failed: " + error.message);
+            });
+
         
         // Respond with the updated setting
         res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: updatedSetting.rows[0]});
