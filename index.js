@@ -2411,6 +2411,16 @@ app.post('/stopSpinner', async (req, res) => {
         const drawStartedAt = drawStartedQuery.rows[0].drawstartedat
         const winAmount = drawStartedQuery.rows[0].daily_win_amount
     
+        // Query to fetch formatted date strings from a timestamp column
+        const query = `
+        SELECT TO_CHAR(drawstartedat, 'YYYY-MM-DD HH24:MI:SS') AS formatted_date
+        FROM sitesettings;
+      `;
+
+        // Execute the query
+        const { rows } = await pool.query(query);
+        
+        const formatted_date = rows[0].formatted_date;
         // Step 3: Insert a row in the winners table
         const insertQuery = `
           INSERT INTO winners (draw_id, lotto_number, won_amount, win_at, batch_number)
@@ -2424,7 +2434,7 @@ app.post('/stopSpinner', async (req, res) => {
           lotto_number: lottonumber.id,
           winner_member: winnerMember,
           won_amount: winAmount,
-          win_at: drawStartedAt,
+          win_at: formatted_date,
           batch_number: member.batch_number
         });
         console.log('Spinner stopped successfully');
