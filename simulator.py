@@ -10,11 +10,13 @@ class DistributionSimulation:
         self.stop_event = threading.Event()
         self.distribution_thread = None  # Initialize distribution_thread attribute
         
+        self.total_contribution = 0
         self.number_of_users = 100000
         self.distribution_amount = 1000000
         self.lucky_contribution = 550
+        self.lucky_contribution_discount = 300
         self.unlucky_contribution = 50
-        self.user_contributions = [{"contribution": 0, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount} for _ in range(self.number_of_users)]  # Initialize user_contributions
+        self.user_contributions = [{"contribution": 0, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount, "contributionAmount": self.unlucky_contribution} for _ in range(self.number_of_users)]  # Initialize user_contributions
         
         self.total_lucky_users = 0
         self.remaining_users = self.number_of_users
@@ -107,6 +109,7 @@ class DistributionSimulation:
 
     def distribute_daily(self):
         valid = self.validate_day_counter_input(self.day_counter_entry.get())
+        total_contribution = 0
         # while not self.stop_event.is_set():
         while self.remaining_users > 0 and (not valid or self.day_counter < int(self.day_counter_entry.get())):
              
@@ -115,27 +118,32 @@ class DistributionSimulation:
 
             # Update distribution_amount based on day_counter
             if self.day_counter > 365 * 2:
-                self.distribution_amount = 500000  # Change distribution_amount to 500,000 after 3 years
+                self.distribution_amount = 500000  # Change distribution_amount to 500,000 after 2 years
                 # Update distribution_amount for users who have not been lucky yet
                 for user in self.user_contributions:
                     if not user["lucky"]:
                         user["distributionAmount"] = self.distribution_amount
 
             if self.day_counter > 365 * 4:
-                self.distribution_amount = 250000  # Change distribution_amount to 250,000 after 5 years
+                self.distribution_amount = 250000  # Change distribution_amount to 250,000 after 4 years
                 # Update distribution_amount for users who have not been lucky yet
                 for user in self.user_contributions:
                     if not user["lucky"]:
                         user["distributionAmount"] = self.distribution_amount
-
-            # Calculate the total contribution for the day
-            total_contribution = (self.total_lucky_users * self.lucky_contribution) + (self.remaining_users * self.unlucky_contribution) + self.remaining_amount
+            for user in self.user_contributions:
+                total_contribution += user['contributionAmount'] 
+            print(total_contribution)
+            # # Calculate the total contribution for the day
+            # total_contribution = (self.total_lucky_users * self.lucky_contribution) + (self.remaining_users * self.unlucky_contribution) + self.remaining_amount
 
             # Calculate the number of lucky users for this distribution
             current_lucky_users = total_contribution // self.distribution_amount
+            print(current_lucky_users)
 
             # Calculate the remaining amount after distributing to lucky users
             self.remaining_amount = total_contribution % self.distribution_amount
+            print(self.remaining_amount)
+            total_contribution = total_contribution - (current_lucky_users * self.distribution_amount) + self.remaining_amount
 
             # Update the total number of lucky users
             self.total_lucky_users += current_lucky_users
@@ -156,11 +164,15 @@ class DistributionSimulation:
                     continue
 
                 if user["contribution"] < user["distributionAmount"]:
-                    if not user["lucky"]:
-                        user["contribution"] += self.unlucky_contribution
-                    else:
-                        user["contribution"] += self.lucky_contribution
-
+                    # if not user["lucky"]:
+                    #     user["contribution"] += self.unlucky_contribution
+                    # else:
+                    #     user["contribution"] += self.lucky_contribution
+                    if user['distributionAmount'] == 250000 and user['lucky'] == True:
+                        user['contributionAmount'] = self.lucky_contribution_discount
+                    if user['distributionAmount'] != 250000 and user['lucky'] == True:
+                        user['contributionAmount'] = self.lucky_contribution
+                    user["contribution"] += user['contributionAmount']
                     # Check if this contribution completes the user's total distribution amount
                     if user["contribution"] >= user["distributionAmount"]:
                         user["finished"] = True
@@ -262,6 +274,7 @@ class DistributionSimulation:
         self.total_lucky_users = 0
         self.remaining_users = 100000
         self.distribution_amount = 1000000
+        self.total_contribution = 0
         self.remaining_amount = 0
         self.finished_users = 0
 
