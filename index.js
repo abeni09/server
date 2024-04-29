@@ -2014,7 +2014,7 @@ app.post('/startDraw', async (req, res) => {
             });
 
         if (drawstarted) {
-          firebase.database().ref('Winners').set(null);
+          // firebase.database().ref('Winners').set(null);
           firebase.database().ref('Draw').set(null);
           
         }        
