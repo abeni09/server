@@ -255,6 +255,16 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         var insertQuery
         const drawSettingQuery = await pool.query('SELECT drawstartedat FROM sitesettings');
         const drawStartedValue = drawSettingQuery.rows[0].drawstartedat;
+        // Query to fetch formatted date strings from a timestamp column
+        const query = `
+        SELECT TO_CHAR(drawstartedat, 'YYYY-MM-DD HH24:MI:SS') AS formatted_date
+        FROM sitesettings;
+      `;
+
+        // Execute the query
+        const { rows } = await pool.query(query);
+        
+        const formatted_date = rows[0].formatted_date;
         if (refererDraw) {
           // Insert the drawer into the Draw table
           insertQuery = await pool.query(
@@ -275,14 +285,14 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           
         }
         console.log(drawStartedValue);
-        console.log(drawStartedValue.toString());
+        console.log(formatted_date);
         
         // Write data to Firebase
         const drawRef = firebase.database().ref('Draw').child(drawer.id);
         drawRef.set({
           drawn_by: drawer.id,
-          drawn_at: drawStartedValue.toString(),
-          draw_date: drawStartedValue,
+          drawn_at: formatted_date,
+          draw_date: formatted_date,
           timer: countdownSeconds,
           used: false,
           batch_number: batchNumber
@@ -351,7 +361,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
           if (updatedTimer === 0) {
             // Clear the interval if the timer reaches 0
             clearInterval(intervalId);
-            // drawRef.set(null);
+            drawRef.set(null);
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
             // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
