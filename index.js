@@ -274,12 +274,13 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           );
           
         }
+        console.log(drawStartedValue);
         
         // Write data to Firebase
         const drawRef = firebase.database().ref('Draw').child(drawer.id);
         drawRef.set({
           drawn_by: drawer.id,
-          drawn_at: drawStartedValue,
+          drawn_at: drawStartedValue.toString(),
           draw_date: drawStartedValue,
           timer: countdownSeconds,
           used: false,
