@@ -2383,7 +2383,7 @@ app.post('/stopSpinner', async (req, res) => {
       const checkMembers = await pool.query('select * from members where id = $1 and won = false', [parseInt(winnerMember)])
       const member = checkMembers.rows[0]
 
-      const checkLottoNumber = await pool.query('select id from lottonumbers where lotto_number = $1 and member = $2', [winnerLotto, parseInt(winnerMember)])
+      const checkLottoNumber = await pool.query('select id, lotto_number from lottonumbers where lotto_number = $1 and member = $2', [winnerLotto, parseInt(winnerMember)])
       const lottonumber = checkLottoNumber.rows[0]
 
       if (lottonumber.rowCount === 0) {
@@ -2431,7 +2431,8 @@ app.post('/stopSpinner', async (req, res) => {
         const winnerRef = firebase.database().ref('Winners').child(winnerMember);
         winnerRef.set({
           draw_id: drawID,
-          lotto_number: lottonumber.id,
+          lotto_number_id: lottonumber.id,
+          lotto_number: lottonumber.lotto_number,
           winner_member: winnerMember,
           won_amount: winAmount,
           win_at: formatted_date,
