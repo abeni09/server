@@ -280,7 +280,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         const drawRef = firebase.database().ref('Draw').child(drawer.id);
         drawRef.set({
           drawn_by: drawer.id,
-          drawn_at: drawStartedValue.toString(),
+          drawn_at: drawStartedValue,
           draw_date: drawStartedValue,
           timer: countdownSeconds,
           used: false,
