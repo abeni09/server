@@ -157,13 +157,26 @@ function startDrawTimer(draw_timeout, server_url) {
 }
 
 // Function to stop the draw timer
-function stopDrawTimer() {
+async function stopDrawTimer() {
   clearTimeout(drawTimer); // Clear the timer interval
   // Implement your logic to update drawStarted to false here
   list_of_intervals.forEach(element => {
     clearInterval(element)
   });
   list_of_intervals = []
+  // Retrieve the updated setting after the change
+  const updatedSetting = await pool.query('SELECT * FROM sitesettings');
+  const drawRef = firebase.database().ref('Settings');
+  const siteSetting = updatedSetting.rows[0]
+
+  drawRef.update(siteSetting)
+      .then(function() {
+          console.log("Set succeeded.");
+      })
+      .catch(function(error) {
+          console.log("Set failed: " + error.message);
+      });
+
   console.log('Draw stopped: all intervals/timeouts cleared');
 }
 
@@ -182,7 +195,7 @@ async function checkForChanges(newDrawStarted) {
 
       // Update drawStarted to false if the countdown reaches zero
       if (!newDrawStarted) {
-        stopDrawTimer()
+        await stopDrawTimer()
       } else {
         startDrawTimer(draw_timeout, server_url)
         // Loop batch_amount times
@@ -336,7 +349,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
           if (updatedTimer === 0) {
             // Clear the interval if the timer reaches 0
             clearInterval(intervalId);
-            drawRef.set(null);
+            // drawRef.set(null);
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
             // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
@@ -1975,18 +1988,11 @@ app.post('/startDraw', async (req, res) => {
       }
       // await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, 'NOW()']).then(async()=>{
       await pool.query(`UPDATE SiteSettings SET drawstarted = $1, ${drawstarted ? 'drawstartedat' : 'drawendedat'} = $3 WHERE id = $2`, [drawstarted, setting.rows[0].id, incrementedDate]).then(async()=>{
-        // After updating the drawstarted value, check for changes
-        await checkForChanges(drawstarted);
+
 
         // Retrieve the updated setting after the change
         const updatedSetting = await pool.query('SELECT * FROM sitesettings');
         const drawRef = firebase.database().ref('Settings');
-        // const property = drawstarted ? 'drawstartedat' : 'drawendedat';
-
-        // // Create an object with a dynamic key using square brackets
-        // const dataToUpdate = {};
-        // dataToUpdate[property] = incrementedDate;
-        // dataToUpdate['drawStarted'] = drawstarted;
         const siteSetting = updatedSetting.rows[0]
 
         drawRef.update(siteSetting)
@@ -2001,7 +2007,9 @@ app.post('/startDraw', async (req, res) => {
           firebase.database().ref('Winners').set(null);
           firebase.database().ref('Draw').set(null);
           
-        }
+        }        
+        // After updating the drawstarted value, check for changes
+        await checkForChanges(drawstarted);
         // Respond with the updated setting
         res.status(200).json({ message: `Draw ${drawstarted ? "started" : "stopped"} successfully` , setting: siteSetting});
       });
