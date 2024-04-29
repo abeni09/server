@@ -284,12 +284,13 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           );
           
         }
-        console.log(drawStartedValue);
-        console.log(formatted_date);
-        
+  
+        const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
+        const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
         // Write data to Firebase
         const drawRef = firebase.database().ref('Draw').child(drawer.id);
         drawRef.set({
+          id: newDrawId,
           drawn_by: drawer.id,
           drawn_at: formatted_date,
           draw_date: formatted_date,
@@ -298,9 +299,6 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           batch_number: batchNumber
           // referer_draw: refererDraw
         });
-  
-        const newDraw = insertQuery.rows[0]; // Retrieve the newly inserted row
-        const newDrawId = newDraw.id; // Retrieve the newly inserted row's ID
   
         console.log(`Drawer found for batch ${batchNumber}:`, drawer.name);
         // await pool.query(`SELECT pg_notify('draw_insert', '{"table_name": "draw", "operation": "INSERT", "drawn_by": $1, "newData": $2}')`, [newDraw.drawn_by, JSON.stringify(newDraw)]);
