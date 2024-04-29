@@ -254,7 +254,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
         const drawerId = drawer.id
         var insertQuery
         const drawSettingQuery = await pool.query('SELECT drawstartedat FROM sitesettings');
-        const drawStartedValue = drawSettingQuery[0].drawstartedat;
+        const drawStartedValue = drawSettingQuery.rows[0].drawstartedat;
         if (refererDraw) {
           // Insert the drawer into the Draw table
           insertQuery = await pool.query(
