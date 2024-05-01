@@ -1984,7 +1984,7 @@ app.put('/setUserStatus/:userId/:status', async (req, res) => {
 
   try {
     // Update user's online status in the database
-    await pool.query('UPDATE users SET isonline = $2 WHERE id = $1', [userId, status]);
+    await pool.query('UPDATE members SET isonline = $2 WHERE id = $1', [userId, status]);
     res.status(200).send('User online status updated to offline');
   } catch (error) {
     console.error(`Error updating user online status to ${status}:`, error);
