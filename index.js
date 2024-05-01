@@ -1976,6 +1976,21 @@ app.post('/resetFirebaseDrawData', async (req, res) => {
     
   }
 })
+
+// Endpoint to update user's offline status
+app.put('/setUserStatus/:userId/:status', async (req, res) => {
+  const userId = req.params.userId;
+  const status = req.params.status;
+
+  try {
+    // Update user's online status in the database
+    await pool.query('UPDATE users SET isonline = $2 WHERE id = $1', [userId, status]);
+    res.status(200).send('User online status updated to offline');
+  } catch (error) {
+    console.error(`Error updating user online status to ${status}:`, error);
+    res.status(500).send('Internal server error');
+  }
+});
 app.post('/startDraw', async (req, res) => {
   try {
     const userId = req.user.userId
