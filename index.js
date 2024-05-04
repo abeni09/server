@@ -185,12 +185,12 @@ async function checkForChanges(newDrawStarted) {
   try {
     // Fetch settings from sitesettings table
     const settingsQuery = await pool.query('SELECT batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat, server_url FROM sitesettings LIMIT 1');
-    const { batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat, server_url } = settingsQuery.rows[0];
-
+    var { batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat, server_url } = settingsQuery.rows[0];
     // Check if settings are valid
     if (batch_amount && batch_amount > 0 && daily_number_of_winners && daily_number_of_winners > 0 &&
         draw_timeout && draw_timeout > 0 && member_spin_timeout && member_spin_timeout > 0 && drawstartedat) {
-      
+      member_spin_timeout = member_spin_timeout + 10
+    
       console.log('Settings retrieved:', { batch_amount, daily_number_of_winners, draw_timeout, member_spin_timeout, drawstartedat });
 
       // Update drawStarted to false if the countdown reaches zero
@@ -214,7 +214,7 @@ async function checkForChanges(newDrawStarted) {
                 startTimerListener(newDrawId, member_spin_timeout);
                 // startCountdownTimer(newDrawId, member_spin_timeout)
                 
-              }, 15000);
+              }, 5000);
             }
             
             
@@ -350,6 +350,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
             `UPDATE Draw SET timer = $1 WHERE id = $2`,
             [updatedTimer, drawId]
           );
+          drawRef.child('timer').update(updatedTimer)
           // await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": ${drawn_by}, "newData": ${updatedTimer}}')`);
 
   
@@ -367,7 +368,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
             if (newDrawId) {
               setTimeout(() => {
                 startTimerListener(newDrawId, member_spin_timeout);
-              }, 10000);
+              }, 5000);
               // startTimerListener(newDrawId, member_spin_timeout);
             }
           }
