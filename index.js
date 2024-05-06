@@ -211,7 +211,7 @@ async function checkForChanges(newDrawStarted) {
               console.log(newDrawId);
               console.log("Headstart given for the server to send the draw spinner to the client");
               setTimeout(() => {
-                startTimerListener(newDrawId, member_spin_timeout);
+                startTimerListener(newDrawId, drawerId, member_spin_timeout);
                 // startCountdownTimer(newDrawId, member_spin_timeout)
                 
               }, 5000);
@@ -364,10 +364,10 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
             // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
-            const newDrawId = await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
+            const [newDrawId, drawerId] = await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
             if (newDrawId) {
               setTimeout(() => {
-                startTimerListener(newDrawId, member_spin_timeout);
+                startTimerListener(newDrawId, drawerId, member_spin_timeout);
               }, 5000);
               // startTimerListener(newDrawId, member_spin_timeout);
             }
@@ -1967,7 +1967,8 @@ app.post('/resetFirebaseDrawData', async (req, res) => {
         
     // Set data to null
     const drawRef = firebase.database().ref('Draw').child(drawerId);
-    drawRef.set(null);
+    // drawRef.set(null);
+    drawRef.update({expired:true});
     console.error(`Successfully set to null: ${drawerId}`);
     res.status(200).json({ message: `Successfully set to null`});
       
