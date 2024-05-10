@@ -2646,6 +2646,7 @@ app.post('/updateSiteSettings', async (req, res)=>{
     const user = checkUser.rows[0]
     if (user && user.role.trim() == 'Admin') {
       const tableName = 'siteSettings'; // Specify your table name
+      firebase.database().ref('Settings').update(updatedData)
 
       // Construct the dynamic column-value pairs from the JSON data, excluding null values
       const columnValuePairs = Object.entries(updatedData)
