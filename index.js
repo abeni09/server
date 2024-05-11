@@ -321,7 +321,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
 // Function to continuously monitor Draw table and decrease timer
 function startTimerListener(drawId, drawerId, member_spin_timeout) {
   // Set an interval to execute the timer logic every second
-  const drawRef = firebase.database().ref(`/Draw/${drawerId}`);
+  const drawRef = firebase.database().ref(`Draw/${drawerId}`);
   const intervalId = setInterval(async () => {
     list_of_intervals.push(intervalId)
     try {
@@ -350,7 +350,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
             `UPDATE Draw SET timer = $1 WHERE id = $2`,
             [updatedTimer, drawId]
           );
-          drawRef.child('timer').update(updatedTimer)
+          drawRef.update({timer:updatedTimer})
           // await pool.query(`SELECT pg_notify('draw_update', '{"table_name": "draw", "operation": "UPDATE", "drawn_by": ${drawn_by}, "newData": ${updatedTimer}}')`);
 
   
