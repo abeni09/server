@@ -198,6 +198,7 @@ async function checkForChanges(newDrawStarted) {
         await stopDrawTimer()
       } else {
         startDrawTimer(draw_timeout, server_url)
+        firebase.database().ref('Draw').set(null)
         // Loop batch_amount times
         for (let i = 1; i <= batch_amount; i++) {
           // Implement the logic to fetch random drawer and insert into Draw table here
@@ -296,6 +297,7 @@ async function fetchRandomDrawerAndInsertIntoDraw(batchNumber, countdownSeconds,
           draw_date: formatted_date,
           timer: countdownSeconds,
           used: false,
+          expired: false,
           batch_number: batchNumber
           // referer_draw: refererDraw
         });
@@ -343,6 +345,12 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
           console.log(`Draw record with ID ${drawId} has been used. Stopping timer.`);
           clearInterval(intervalId);
           
+        }
+        else if (drawRef.child('expired') == true) {
+          // If used is true, cancel the interval
+          console.log(`Draw record with ID ${drawId} has expired. Stopping timer.`);
+          clearInterval(intervalId);
+          
         } 
         else {
           // Update the timer value in the database
@@ -360,7 +368,7 @@ function startTimerListener(drawId, drawerId, member_spin_timeout) {
           if (updatedTimer === 0) {
             // Clear the interval if the timer reaches 0
             clearInterval(intervalId);
-            drawRef.set(null);
+            drawRef.update({expired: true});
             // Fetch a new drawer and insert into Draw table
             console.log(`Timer reached 0 for draw record with ID ${drawId}. Fetching new drawer.`);
             // await fetchRandomDrawerAndInsertIntoDraw(drawRecord.batch_number, member_spin_timeout, drawId);
@@ -2488,7 +2496,25 @@ app.get('/fetchSiteSettings', async (req, res) => {
       res.status(500).json({ message: 'Internal Server Error' });
   }
 });  
+app.get('/checkDepositStatus/:id', async (req, res)=>{
+  try {
+    const memberId = req.params.id;
+    const memberInfo = await pool.query('SELECT * FROM Members WHERE id = $1', [memberId]);
+    if (memberInfo.rowCount > 0) {
+      const memberWon = memberInfo.rows[0].won
+      if (memberWon) {
+        
+      }
+      else{
 
+      }
+    }
+
+  } catch (error) {
+    
+  }
+
+})
 // // Endpoint to process deposit, fetch members, and perform required operations
 // app.post('/processDeposit', async (req, res) => {
 //     try {
