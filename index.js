@@ -637,10 +637,13 @@ async function createFunctionsForTriggers(){
       VOLATILE NOT LEAKPROOF
   AS $BODY$
     BEGIN
-        -- Update the expired value for all rows in lottonumbers except the winner lotto_number
-        UPDATE lottonumbers
+        -- Update the expired value for all rows in lottonumbers except the winner lotto_numberUPDATE lottonumbers
         SET expired = true
-        WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings))
+        WHERE DATE_TRUNC('day', deposited_at) = (
+          SELECT DATE_TRUNC('day', drawstartedat) 
+          FROM sitesettings 
+          LIMIT 1
+        );        
         -- AND lotto_number <> NEW.lotto_number;
     
         -- Set the winner value to true for the winner's row
@@ -1241,6 +1244,17 @@ async function createTables() {
         FOREIGN KEY (draw_id) REFERENCES Draw(id),
         FOREIGN KEY (lotto_number) REFERENCES LottoNumbers(id)
     )`);
+    // Create Winners table if it doesn't exist
+    await pool.query(`CREATE TABLE IF NOT EXISTS transfers (
+        id SERIAL PRIMARY KEY,
+        old_winner_id INTEGER,
+        new_winner_id INTEGER,
+        winner_id INTEGER,
+        won_amount DECIMAL(10, 2),
+        FOREIGN KEY (old_winner_id) REFERENCES Members(id),
+        FOREIGN KEY (new_winner_id) REFERENCES Members(id),
+        FOREIGN KEY (winner_id) REFERENCES Winners(id)
+    )`);
     console.log('Tables created successfully');
   } catch (err) {
     console.error('Error creating tables', err);
@@ -1669,7 +1683,7 @@ async function createTriggers() {
       -- Update the expired value for all rows in lottonumbers except the winner lotto_number
       UPDATE lottonumbers
       SET expired = true
-      WHERE DATE_TRUNC('day', deposited_at) > DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings));
+      WHERE DATE_TRUNC('day', deposited_at) = DATE_TRUNC('day', (SELECT drawstartedat FROM sitesettings));
       -- AND id <> NEW.lotto_number;
   
       -- Set the winner value to true for the winner's row
@@ -2059,6 +2073,33 @@ app.post('/startDraw', async (req, res) => {
   }
 });
 
+// Endpoint to fetch Transfers
+app.get('/fetchTransfers', async (req, res) => {
+  try {
+    const userId = req.user.userId
+    console.log(userId);
+    
+    const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
+    const user = checkUser.rows[0]
+    console.log(user.role.trim());
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Banker')) {
+      
+      const transfers = await pool.query(
+        `SELECT *
+        FROM transfers`);
+        console.log(transfers.rowCount);
+        // console.log(transfer.rows);
+      res.status(200).json({ transfers: transfers.rows, message: 'Transfers data fetched successfully' });
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
+  } catch (error) {
+    console.error('Error fetching transfers', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 // Endpoint to fetch winners
 app.get('/fetchWinners', async (req, res) => {
   try {
@@ -2388,6 +2429,97 @@ app.get('/fetchCurrentLottoNumber/:id/:date', async (req, res) => {
 });
 
 app.post('/stopSpinner', async (req, res) => {
+  try {
+    const { drawnBy, drawID, winnerMember, winnerLotto } = req.body;
+    if (!drawnBy || !drawID || !winnerMember || !winnerLotto) {
+      return res.status(400).json({message:'Request body is missing'})
+    }
+    
+    const checkUser = await pool.query('select * from members where id = $1', [parseInt(drawnBy)])
+    const user = checkUser.rows[0]
+    if (user) {
+      // Step 1: Check if conditions are met
+      const checkQuery = `
+        SELECT * 
+        FROM Draw 
+        WHERE id = $1 AND drawn_by = $2 AND used = 0 AND timer > 0
+      `;
+      const checkResult = await pool.query(checkQuery, [drawID, drawnBy]);
+  
+      const checkMembers = await pool.query('select * from members where id = $1 and won = false', [parseInt(winnerMember)])
+      const member = checkMembers.rows[0]
+
+      const checkLottoNumber = await pool.query('select id, lotto_number from lottonumbers where lotto_number = $1 and member = $2', [winnerLotto, parseInt(winnerMember)])
+      const lottonumber = checkLottoNumber.rows[0]
+
+      if (lottonumber.rowCount === 0) {
+        console.log('Lotto Number not found!' );
+        return res.status(400).json({ message: 'Lotto Number not found!' });
+      }
+      else if (member.rowCount === 0) {
+        console.log('This member has already won!');
+        return res.status(400).json({ message: 'This member has already won!' });
+      }
+      else if (checkResult.rowCount === 0) {
+        console.log('Conditions not met for stopping spinner');
+        return res.status(400).json({ message: 'Draw data not valid!' });
+      }
+      else{
+    
+        // Step 2: Update the row's used value to true
+        const updateQuery = `
+          UPDATE Draw
+          SET used = 1
+          WHERE id = $1
+        `;
+        await pool.query(updateQuery, [drawID]);
+        const drawStartedQuery = await pool.query('select * from sitesettings')
+        const drawStartedAt = drawStartedQuery.rows[0].drawstartedat
+        const winAmount = drawStartedQuery.rows[0].daily_win_amount
+    
+        // Query to fetch formatted date strings from a timestamp column
+        const query = `
+        SELECT TO_CHAR(drawstartedat, 'YYYY-MM-DD HH24:MI:SS') AS formatted_date
+        FROM sitesettings;
+      `;
+
+        // Execute the query
+        const { rows } = await pool.query(query);
+        
+        const formatted_date = rows[0].formatted_date;
+        // Step 3: Insert a row in the winners table
+        const insertQuery = `
+          INSERT INTO winners (draw_id, lotto_number, won_amount, win_at, batch_number)
+          VALUES ($1, $2, $3, $4, $5)
+        `;
+        await pool.query(insertQuery, [drawID, lottonumber.id, winAmount, drawStartedAt, member.batch_number]);
+        
+        const winnerRef = firebase.database().ref('Winners').child(winnerMember);
+        winnerRef.set({
+          draw_id: drawID,
+          lotto_number_id: lottonumber.id,
+          lotto_number: lottonumber.lotto_number,
+          winner_member: winnerMember,
+          won_amount: winAmount,
+          win_at: formatted_date,
+          batch_number: member.batch_number
+        });
+        console.log('Spinner stopped successfully');
+        res.status(200).json({ message: 'Spinner stopped successfully' });
+
+      }
+    }
+    else{
+      console.error(`User is not authorized: ${user.role}`);
+      res.status(400).json({ message: `User is not authorized!` });
+    }
+  } catch (error) {
+    console.error('Error stopping spinner', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.post('/processTransfer', async (req, res) => {
   try {
     const { drawnBy, drawID, winnerMember, winnerLotto } = req.body;
     if (!drawnBy || !drawID || !winnerMember || !winnerLotto) {
