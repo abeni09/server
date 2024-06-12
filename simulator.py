@@ -3,6 +3,7 @@ from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import threading
+import pandas as pd
 
 class DistributionSimulation:
     def __init__(self, root):
@@ -16,16 +17,17 @@ class DistributionSimulation:
         self.lucky_contribution = 550
         self.lucky_contribution_discount = 300
         self.unlucky_contribution = 50
-        self.user_contributions = [{"contribution": 0, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount, "contributionAmount": self.unlucky_contribution} for _ in range(self.number_of_users)]  # Initialize user_contributions
+        self.user_contributions = [{"contribution": 50, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount, "contributionAmount": self.unlucky_contribution} for _ in range(self.number_of_users)]  # Initialize user_contributions
         
         self.total_lucky_users = 0
         self.remaining_users = self.number_of_users
         self.remaining_amount = 0
-        self.day_counter = 0
+        self.day_counter = 1
         self.finished_users = 0
         self.setup_ui()
         
         self.days = []
+        self.user_list = []
         self.daily_luck_users = []
         self.total_contributions = []
         self.total_money_contributions = []
@@ -37,6 +39,27 @@ class DistributionSimulation:
         self.unlucky_users = []
         self.total_lucky_distribution = []
         self.finished_users_list = []
+
+
+    def export_to_excel(self):
+        data = {
+            "Days": self.days,
+            "Daily Lucky Users": self.daily_luck_users,
+            "Total Contributions": self.total_contributions,
+            "Total Money Contributions": self.total_money_contributions,
+            "Total Lucky Users": self.total_lucky_users_list,
+            # "Total Lucky Users at 250": self.total_lucky_users_list_250,
+            # "Total Lucky Users at 500": self.total_lucky_users_list_500,
+            # "Total Lucky Users at 1000": self.total_lucky_users_list_1000,
+            "Daily Single User Payout": self.daily_single_user_payout,
+            "Unlucky Users": self.unlucky_users,
+            "Total Lucky Distribution": self.total_lucky_distribution,
+            "Finished Users": self.finished_users_list,
+        }
+
+        df = pd.DataFrame(data)
+        df.to_excel("distribution_simulation.xlsx", index=False)
+        print("Data exported to distribution_simulation.xlsx")
 
     def setup_ui(self):
         # Set a modern theme
@@ -50,6 +73,9 @@ class DistributionSimulation:
         # Add a text widget for informational text
         self.info_text = tk.Text(main_frame, height=10, width=50)
         self.info_text.pack(pady=(0, 20))
+        # Create a button to export the data to Excel
+        self.export_button = ttk.Button(main_frame, text="Export to Excel", command=self.export_to_excel, style="Button.TButton")
+        self.export_button.pack(pady=(10, 20))
         # Create a label for the title
         title_label = ttk.Label(main_frame, text="Distribution Simulation", font=("Helvetica", 18, "bold"))
         title_label.pack(pady=(0, 20))
@@ -157,7 +183,7 @@ class DistributionSimulation:
     def distribute_daily(self):
         valid = self.validate_day_counter_input(self.day_counter_entry.get())
         # total_contribution = 0
-        initValue = 5
+        initValue = 0
         total_money_contribution = 0
         mapList =[]
         counter = 0
@@ -165,31 +191,33 @@ class DistributionSimulation:
         first500 = False
         first250 = False
         # while not self.stop_event.is_set():
-        while self.remaining_users > 0 and (not valid or self.day_counter < int(self.day_counter_entry.get())):
+        while self.remaining_users > 0 and (not valid or self.day_counter <= int(self.day_counter_entry.get())):
              
             total_contribution = 0
-            self.day_counter += 1
+            # print(self.day_counter)
+            # print(self.user_contributions)
+            # print("")
             # print('Day '+ str(self.day_counter))
             # print(f"Day: {self.day_counter}")
 
             # Update distribution_amount based on day_counter
-            # if self.day_counter > 365 * 2:
-            #     self.distribution_amount = 500000  # Change distribution_amount to 500,000 after 2 years
-            #     # Update distribution_amount for users who have not been lucky yet
-            #     for user in self.user_contributions:
-            #         if not user["lucky"]:
-            #             user["distributionAmount"] = self.distribution_amount
+            if self.day_counter > 365 * 2:
+                self.distribution_amount = 500000  # Change distribution_amount to 500,000 after 2 years
+                # Update distribution_amount for users who have not been lucky yet
+                for user in self.user_contributions:
+                    if not user["lucky"]:
+                        user["distributionAmount"] = self.distribution_amount
 
-            # if self.day_counter > 365 * 4:
-            #     self.distribution_amount = 250000  # Change distribution_amount to 250,000 after 4 years
-            #     # Update distribution_amount for users who have not been lucky yet
-            #     for user in self.user_contributions:
-            #         if not user["lucky"]:
-            #             user["distributionAmount"] = self.distribution_amount
+            if self.day_counter > 365 * 4:
+                self.distribution_amount = 250000  # Change distribution_amount to 250,000 after 4 years
+                # Update distribution_amount for users who have not been lucky yet
+                for user in self.user_contributions:
+                    if not user["lucky"]:
+                        user["distributionAmount"] = self.distribution_amount
             for user in self.user_contributions:
                 total_contribution += user['contributionAmount'] 
-            total_contribution += self.remaining_amount
             total_money_contribution += total_contribution
+            total_contribution += self.remaining_amount
             # print(total_contribution)
             # print(self.remaining_amount)
             # print(self.distribution_amount)
@@ -201,17 +229,17 @@ class DistributionSimulation:
             #     self.update_information({'Day '+ str(self.day_counter - 3) : current_lucky_users})
             #     self.update_information({'Init value ' : self.daily_luck_users})
 
-            # if current_lucky_users == initValue:
-            #     counter += 1
-            #     if counter > 2:
-            #         if initValue not in self.daily_luck_users:
-            #             counter = 0
-            #             self.update_information({'Day '+ str(self.day_counter) : current_lucky_users})
-            #             self.update_information({'Trial Day '+ str(self.day_counter) : self.daily_luck_users})
-            #         else:
-            #             self.update_information({'Day '+ str(self.day_counter) : current_lucky_users})
-            #             self.update_information({'Init value '+ str(initValue) : self.daily_luck_users})
-            # initValue = current_lucky_users
+            if current_lucky_users != initValue:
+                # counter += 1
+                # if counter > 2:
+                #     if initValue not in self.daily_luck_users:
+                #         counter = 0
+                #         self.update_information({'Day '+ str(self.day_counter) : current_lucky_users})
+                #         self.update_information({'Trial Day '+ str(self.day_counter) : self.daily_luck_users})
+                #     else:
+                self.update_information({'Day '+ str(self.day_counter) : current_lucky_users})
+                # self.update_information({'Init value '+ str(initValue) : self.daily_luck_users})
+            initValue = current_lucky_users
 
             # Calculate the remaining amount after distributing to lucky users
             self.remaining_amount = total_contribution % self.distribution_amount
@@ -237,6 +265,7 @@ class DistributionSimulation:
             # Update each user's contribution and lucky status
             for user in self.user_contributions:
                 if user["finished"]:
+                    user['contributionAmount'] = 0
                     continue
 
                 if user["contribution"] < user["distributionAmount"]:
@@ -245,9 +274,11 @@ class DistributionSimulation:
                     # else:
                     #     user["contribution"] += self.lucky_contribution
                     if user['distributionAmount'] == 250000 and user['lucky'] == True:
-                        user['contributionAmount'] = self.lucky_contribution_discount
+                        user['contributionAmount'] = min(self.lucky_contribution_discount, (user['distributionAmount'] - user["contribution"]))
                     if user['distributionAmount'] != 250000 and user['lucky'] == True:
-                        user['contributionAmount'] = self.lucky_contribution
+                    # if user['lucky'] == True:
+                        user['contributionAmount'] = min(self.lucky_contribution, (user['distributionAmount'] - user["contribution"]))
+                        # user['contributionAmount'] = self.lucky_contribution
                     user["contribution"] += min(user['contributionAmount'], (user['distributionAmount'] - user["contribution"]))
                     # Check if this contribution completes the user's total distribution amount
                     if user["contribution"] == user["distributionAmount"]:
@@ -267,12 +298,12 @@ class DistributionSimulation:
                         # print(user['distributionAmount'])
                         user["finished"] = True
                         self.finished_users += 1
-
             # Update the progress bar and labels
             self.update_progress(self.remaining_users, self.day_counter)
             self.root.update()  # Update the GUI
 
             # Append distribution data to lists for plotting
+            self.user_list.append(self.user_contributions)
             self.days.append(self.day_counter)
             self.daily_luck_users.append(current_lucky_users)
             self.total_contributions.append(total_contribution)
@@ -296,20 +327,16 @@ class DistributionSimulation:
                 # Schedule the plot_data function to be called from the main thread
                 # self.root.after(0, self.plot_data, checkboxes=self.checkboxes)
                 self.root.after(0, lambda: self.plot_data(checkboxes=self.checkboxes))
-                # # for info in self.daily_luck_users:
-                # for i in range(0, len(self.daily_luck_users)):
-                #     initValue = self.daily_luck_users[0]
-                #     counter = 0
-                #     if self.daily_luck_users[i] != initValue:
-                #         counter += 1
-                #         if counter > 100:
-                #             counter = 0
-                #             self.update_information({'Day '+ i+1 : self.daily_luck_users[i]})
-
-
+                # print("Broken loop.")
                 # Exit the loop
                 break
+            self.day_counter += 1
         print("Distribution process completed.")
+        # print("Total lucky distribution.")
+        # print(self.total_lucky_distribution)
+        # print("Total money distribution.")
+        # print(self.total_money_contributions)
+        # print(self.user_list)
         self.first_occurrence_greater(self.daily_luck_users)
         # Join the distribution thread to wait for it to finish
         self.start_button.config(state="normal")
@@ -345,8 +372,8 @@ class DistributionSimulation:
                 elif i == 1:
                     plt.bar(self.days, self.total_contributions)
                     plt.xlabel("Days")
-                    plt.ylabel("Total Contribution")
-                    plt.title("Daily Total amount collected from all members")
+                    plt.ylabel("Daily Contribution")
+                    plt.title("Daily amount collected from all members")
                     # plt.title("ጠቅላላ መዋጮ በጊዜ ሂደት")
                 elif i == 2:
                     plt.bar(self.days, self.total_lucky_users_list)
@@ -381,7 +408,7 @@ class DistributionSimulation:
                 elif i == 7:
                     plt.bar(self.days, self.total_money_contributions)
                     plt.xlabel("Days")
-                    plt.ylabel("Total Money Contribution")
+                    plt.ylabel("Total Contribution")
                     plt.title("Total amount collected from all members")
                     # plt.title("ጠቅላላ መዋጮ በጊዜ ሂደት")
 
@@ -394,7 +421,7 @@ class DistributionSimulation:
         self.info_text.delete('1.0', tk.END)
 
         # Reset variables logic here
-        self.day_counter = 0
+        self.day_counter = 1
         self.total_lucky_users = 0
         self.remaining_users = 100000
         self.distribution_amount = 1000000
@@ -411,7 +438,7 @@ class DistributionSimulation:
 
         # Reset user_contributions
         
-        self.user_contributions = [{"contribution": 0, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount, "contributionAmount": self.unlucky_contribution} for _ in range(self.number_of_users)]  # Initialize user_contributions
+        self.user_contributions = [{"contribution": 50, "lucky": False, "finished": False, "distributionAmount": self.distribution_amount, "contributionAmount": self.unlucky_contribution} for _ in range(self.number_of_users)]  # Initialize user_contributions
         
         # for user in self.user_contributions:
         #     user["contribution"] = 0
@@ -420,6 +447,7 @@ class DistributionSimulation:
         #     user["distributionAmount"] = self.distribution_amount
 
         # Reset lists for plotting
+        self.user_list.clear()
         self.days.clear()
         self.daily_luck_users.clear()
         self.total_contributions.clear()

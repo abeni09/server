@@ -180,7 +180,7 @@ async function stopDrawTimer() {
   console.log('Draw stopped: all intervals/timeouts cleared');
 }
 
-  // Function to check for changes
+// Function to check for changes
 async function checkForChanges(newDrawStarted) {
   try {
     // Fetch settings from sitesettings table
@@ -2109,7 +2109,7 @@ app.get('/fetchWinners', async (req, res) => {
     const checkUser = await pool.query('select * from users where id = $1', [parseInt(userId)])
     const user = checkUser.rows[0]
     console.log(user.role.trim());
-    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Agent')) {
+    if (user && (user.role.trim() == 'Admin' || user.role.trim() == 'Banker')) {
       
       const winners = await pool.query(
         `SELECT winners.win_at, lottonumbers.lotto_number, members.name,
